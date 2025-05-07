@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox alignment="CENTER" spacing="10" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.example.worklogui.LogEditorController">
+    <padding>
+        <Insets bottom="20.0" left="20.0" right="20.0" top="20.0" />
+    </padding>
+
+    <Label text="Work Log Editor" style="-fx-font-size: 16; -fx-font-weight: bold;" />
+
+    <TableView fx:id="logTable" VBox.vgrow="ALWAYS" prefHeight="400.0">
+        <!-- Columns will be added programmatically -->
+    </TableView>
+
+    <HBox spacing="10" alignment="CENTER">
+        <Button fx:id="editLogBtn" text="Edit Entry" onAction="#onEditLog" />
+        <Button fx:id="deleteLogBtn" text="Delete Entry" onAction="#onDeleteLog" />
+        <Button fx:id="clearAllLogsBtn" text="Clear All" onAction="#onClearAllLogs" />
+        <Button fx:id="closeBtn" text="Close" onAction="#onClose" />
+    </HBox>
+</VBox>
