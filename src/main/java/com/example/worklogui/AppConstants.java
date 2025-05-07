@@ -6,7 +6,7 @@ import java.util.Locale;
 public class AppConstants {
 
     // App title (for windows/dialogs)
-    public static final String APP_TITLE = "WorkLog Manager";
+    public static final String APP_TITLE = "WorkLog";
 
     // File paths
     public static final Path WORKLOG_PATH = Path.of("worklog.json");
