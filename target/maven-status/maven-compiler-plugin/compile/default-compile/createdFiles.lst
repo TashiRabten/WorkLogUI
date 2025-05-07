@@ -20,5 +20,6 @@ com\example\worklogui\RegistroTrabalho.class
 com\example\worklogui\AppConstants.class
 com\example\worklogui\CsvExporter.class
 com\example\worklogui\LogEditorUI.class
+com\example\worklogui\WarningUtils.class
 com\example\worklogui\AutoUpdater.class
 com\example\worklogui\RateInfo.class

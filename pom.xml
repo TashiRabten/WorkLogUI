@@ -113,9 +113,6 @@
                     <options>
                         <option>-Dfile.encoding=UTF-8</option>
                     </options>
-                    <jvmArgs>
-                        <jvmArg>--enable-native-access=javafx.graphics</jvmArg>
-                    </jvmArgs>
 
                 </configuration>
             </plugin>
@@ -182,6 +179,9 @@
                                 <resource>
                                     <directory>src/main/resources</directory>
                                     <filtering>false</filtering>
+                                    <includes>
+                                        <include>**/*.properties</include>
+                                    </includes>
                                 </resource>
                             </resources>
                         </configuration>

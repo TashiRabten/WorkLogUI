@@ -60,12 +60,9 @@ public class CsvExporter {
             totalAnoGanho.merge(yearKey, ganho, Double::sum);
         }
 
-        Path exportDir = Paths.get("exports");
-        if (!Files.exists(exportDir)) {
-            Files.createDirectories(exportDir);
-        }
+        Files.createDirectories(AppConstants.EXPORT_FOLDER);
+        Path file = AppConstants.EXPORT_FOLDER.resolve("summary_full.csv");
 
-        Path file = exportDir.resolve("summary_full.csv");
 
         try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
             writer.write('\uFEFF'); // BOM for Excel

@@ -64,8 +64,10 @@ public class LogEditorUI {
             stage.show();
         } catch (IOException e) {
             e.printStackTrace();
-            // Show an error alert
-            new Alert(Alert.AlertType.ERROR, "Error opening Log Editor: " + e.getMessage())
+            // Show an error alert in bilingual format
+            new Alert(Alert.AlertType.ERROR,
+                    "❌ Error opening Log Editor: " + e.getMessage() + "\n" +
+                            "❌ Erro ao abrir o Editor de Registros: " + e.getMessage())
                     .showAndWait();
         }
     }

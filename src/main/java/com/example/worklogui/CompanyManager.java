@@ -19,6 +19,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import com.example.worklogui.WarningUtils;
 
 
 public class CompanyManager {
@@ -39,7 +40,7 @@ public class CompanyManager {
     @FXML
     private Button openLogEditorBtn;
 
-    private static final Path WORKLOG_PATH = AppConstants.WORKLOG_PATH;
+    private static final Path WORKLOG_PATH = FileLoader.getDefaultPath();
 
     private List<RegistroTrabalho> registros = new ArrayList<>();
 
@@ -60,9 +61,9 @@ public class CompanyManager {
     private void onExportCsv() {
         try {
             CsvExporter.exportToCsv(registros);
-            resultArea.setText("✔ Exportado com sucesso para a pasta 'exports'.");
+            resultArea.setText("✔ Exportorted to the 'documents/exports' folder.\n✔ Exportado para a pasta 'documents/exports'.");
         } catch (Exception e) {
-            resultArea.setText("❌ Erro ao exportar: " + e.getMessage());
+            resultArea.setText("❌ Error while exporting: " + e.getMessage() + "❌ Erro ao exportar: " + e.getMessage());
         }
     }
 
@@ -82,7 +83,7 @@ public class CompanyManager {
         try {
             parsedDate = DateParser.parseDate(rawDate);
         } catch (DateTimeParseException e) {
-            resultArea.setText("❌ Invalid date format. Use MM/DD/YYYY or MM/DD/YY.\n❌ Formato de data inválido.");
+            resultArea.setText("❌ Invalid date format. Use MM/DD/YYYY.\n❌ Formato de data inválido. Use MM/DD/AA.");
             return;
         }
 
@@ -115,43 +116,17 @@ public class CompanyManager {
             novo.setMinutos(0);
         }
 
-        double ganhoNovo = info.getTipo().equalsIgnoreCase("minuto") ?
-                novo.getMinutos() * info.getValor() :
-                novo.getHoras() * info.getValor();
-
-        if (dobro) ganhoNovo *= 2;
-
-        String mes = data.substring(6, 10) + "-" + data.substring(0, 2);
-
-        double totalMensal = registros.stream()
-                .filter(r -> {
-                    try {
-                        LocalDate dLocal = LocalDate.parse(r.getData(), DateTimeFormatter.ofPattern("MM/dd/yyyy"));
-                        return dLocal.getYear() == Integer.parseInt(mes.substring(0, 4))
-                                && dLocal.getMonthValue() == Integer.parseInt(mes.substring(5));
-                    } catch (Exception ex) {
-                        return false;
-                    }
-                })
-                .mapToDouble(r -> {
-                    double g = r.getTipoUsado().equalsIgnoreCase("minuto")
-                            ? r.getMinutos() * r.getTaxaUsada()
-                            : r.getHoras() * r.getTaxaUsada();
-                    return r.isPagamentoDobrado() ? g * 2 : g;
-                })
-                .sum();
-
-        double totalComNovo = totalMensal + ganhoNovo;
-        registros.add(novo);
+        registros.add(novo); // ✅ MUST come before calculating warning
 
         try {
             FileLoader.salvarRegistros(AppConstants.WORKLOG_PATH, registros);
+
             StringBuilder msg = new StringBuilder("✔ Work logged successfully.\n✔ Entrada registrada com sucesso.");
 
-            if (totalComNovo >= 1600) {
-                msg.append("\n⚠ WARNING: You have exceeded the $1600.00 monthly limit.");
-            } else if (totalComNovo >= 1500) {
-                msg.append("\n⚠ NOTICE: You are nearing the $1600.00 monthly limit.");
+            String warning = WarningUtils.generateCurrentMonthWarning(registros);
+            if (warning != null) {
+                showAlert(Alert.AlertType.WARNING, "Monthly Income Warning", warning);
+                msg.append(WarningUtils.appendTimestampedWarning(warning));
             }
 
             resultArea.setText(msg.toString());
@@ -159,7 +134,6 @@ public class CompanyManager {
             resultArea.setText("❌ Error saving entry:\n" + e.getMessage());
         }
     }
-
 
     /**
      * Opens the dedicated Log Editor in a new window
@@ -174,15 +148,25 @@ public class CompanyManager {
             // Set a callback to refresh our data when the editor is closed
             editor.setOnClose(() -> {
                 try {
-                    System.out.println("Log Editor closed, refreshing data...");
-
-                    // Reload the work logs from file
+                    // Reload the registros list
                     registros = FileLoader.carregarRegistros(WORKLOG_PATH);
 
-                    // Show success message
-                    resultArea.setText("✔ Work logs have been updated!");
+                    // Prepare the success message
+                    StringBuilder msg = new StringBuilder();
+                    msg.append("✔ Work logs have been updated!\n✔ Registros de trabalho atualizados!");
+
+                    // Check for warnings and include them if present
+                    String warning = WarningUtils.generateCurrentMonthWarning(registros);
+                    if (warning != null) {
+                        msg.append(WarningUtils.appendTimestampedWarning(warning));
+                    }
+
+                    // Replace the current text (don't append)
+                    resultArea.setText(msg.toString());
+
                 } catch (Exception e) {
-                    resultArea.setText("❌ Error refreshing work logs: " + e.getMessage());
+                    resultArea.setText("❌ Error refreshing work logs: " + e.getMessage() +
+                            "\n❌ Erro ao atualizar os registros de trabalho: " + e.getMessage());
                     e.printStackTrace();
                 }
             });
@@ -210,7 +194,7 @@ public class CompanyManager {
             totais.get(empresa)[1] += r.getMinutos();
         }
 
-        StringBuilder sb = new StringBuilder("Resumo Total:\n\n");
+        StringBuilder sb = new StringBuilder("Total Summary / Resumo Total:\n\n");
 
         for (Map.Entry<String, double[]> e : totais.entrySet()) {
             String empresa = e.getKey();
@@ -237,10 +221,10 @@ public class CompanyManager {
                     empresa, horas, minutos));
 
             if (tipo.equals("minuto")) {
-                sb.append(String.format(" → Total in minutes: %.2f\n", (horas * 60) + minutos));
+                sb.append(String.format(" → Total in minutes / Total em minutos: %.2f\n", (horas * 60) + minutos));
             }
 
-            sb.append(String.format(" → Total in hours: %.2f\n\n", totalHoras));
+            sb.append(String.format(" → Total in hours / Total em horas: %.2f\n\n", totalHoras));
         }
 
         resultArea.setText(sb.toString());
@@ -287,7 +271,7 @@ public class CompanyManager {
                     .merge(mes, ganho, Double::sum);
         }
 
-        StringBuilder sb = new StringBuilder("📅 Monthly Details:\n\n");
+        StringBuilder sb = new StringBuilder("📅 Monthly Details / Detalhes Mensais:\n\n");
 
         for (String mes : registrosPorMesEDia.keySet()) {
             sb.append("🗓 " + mes + "\n");
@@ -308,7 +292,7 @@ public class CompanyManager {
             sb.append("------------------------------\n");
         }
 
-        sb.append("\n📆 Yearly Summary:\n\n");
+        sb.append("\n📆 Yearly Summary / Resumo Anual:\n\n");
         for (String ano : totaisPorAnoEMes.keySet()) {
             sb.append("📅 " + ano + "\n");
             Map<String, Double> meses = totaisPorAnoEMes.get(ano);
@@ -344,19 +328,17 @@ public class CompanyManager {
             total += ganho;
         }
 
-        StringBuilder sb = new StringBuilder("Ganho Total:\n\n");
+        StringBuilder sb = new StringBuilder("Earnings / Ganho Total:\n\n");
         for (Map.Entry<String, Double> e : ganhos.entrySet()) {
             sb.append(String.format("%s: $%.2f\n", e.getKey(), e.getValue()));
         }
-        sb.append(String.format("\nTotal Geral: $%.2f", total));
+        sb.append(String.format("\nGrand Total / Total Geral: $%.2f", total));
 
         resultArea.setText(sb.toString());
     }
 
-
-
     // First, let's add a TableView to the UI in the CompanyManager class
-// Add these fields to the CompanyManager class
+    // Add these fields to the CompanyManager class
 
     @FXML
     private TableView<RegistroTrabalho> logTable;
@@ -367,7 +349,6 @@ public class CompanyManager {
     @FXML
     private Button clearAllLogsBtn;
 
-    @FXML
     public void initialize() {
         try {
             FileLoader.inicializarArquivo(WORKLOG_PATH);
@@ -378,9 +359,15 @@ public class CompanyManager {
 
             reloadCompanyList();
 
-            // Initialize the log table
+            // ✅ Show current month's income warning in resultArea
+            String warning = WarningUtils.generateCurrentMonthWarning(registros);
+            if (warning != null) {
+                String block = WarningUtils.appendTimestampedWarning(warning);
+                resultArea.setText(block);
+            }
+
         } catch (Exception e) {
-            resultArea.setText("Erro ao inicializar: " + e.getMessage());
+            resultArea.setText("Erro ao inicializar / Error initializing: " + e.getMessage());
         }
     }
 
@@ -462,5 +449,4 @@ public class CompanyManager {
         alert.setContentText(content);
         alert.showAndWait();
     }
-
 }

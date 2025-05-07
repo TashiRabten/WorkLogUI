@@ -6,23 +6,52 @@ import javafx.scene.Scene;
 import javafx.scene.image.Image;
 import javafx.stage.Stage;
 
+import java.io.InputStream;
+
 public class App extends Application {
 
     @Override
     public void start(Stage primaryStage) throws Exception {
+        UpdateChecker.checkForUpdates();
         FXMLLoader loader = new FXMLLoader(App.class.getResource("/com/example/worklogui/main-view.fxml"));
         Scene scene = new Scene(loader.load());
         primaryStage.setScene(scene);
         primaryStage.setTitle("WorkLog");
-        scene.getStylesheets().add(getClass().getResource("/style.css").toExternalForm());
-        primaryStage.setResizable(false);
-        primaryStage.show();
-        primaryStage.getIcons().add(new Image(getClass().getResourceAsStream("/icons/WorkLog.jpg")));
-        UpdateChecker.checkForUpdates();
+        var styleUrl = getClass().getResource("/style.css");
+        if (styleUrl != null) {
+            scene.getStylesheets().add(styleUrl.toExternalForm());
+        } else {
+            System.err.println("⚠️ style.css not found in resources!");
+        }
 
+        primaryStage.setResizable(false);
+
+        InputStream iconStream = getClass().getResourceAsStream("/Icons/WorkLog.jpg");
+        if (iconStream == null) {
+            System.err.println("❌ Failed to load WorkLog.jpg icon!");
+        } else {
+            primaryStage.getIcons().add(new Image(iconStream));
+            System.out.println("✅ Icon loaded successfully.");
+        }
+
+        // ✅ Exit cleanly when window is closed
+        primaryStage.setOnCloseRequest(e -> {
+            AutoUpdater.shutdown();   // Just in case, even though stop() also handles it
+            javafx.application.Platform.exit();
+            System.exit(0);
+        });
+
+        primaryStage.show();
+    }
+
+    @Override
+    public void stop() throws Exception {
+        AutoUpdater.shutdown();
+        super.stop();
     }
 
     public static void main(String[] args) {
         launch(args);
+
     }
 }

@@ -28,6 +28,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class AutoUpdater {
+
+
+
     private static boolean manualCheck = false;
     private static final String CURRENT_VERSION = getCurrentVersion();
     private static final String GITHUB_RELEASES_API = "https://api.github.com/repos/TashiRabten/WorkLogUI/releases";
@@ -101,7 +104,7 @@ public class AutoUpdater {
         latestVersion = latestVersion.trim();
 
         String url = findInstallerUrl(release);
-        String htmlUrl = release.optString("html_url", "https://github.com/TashiRabten/MantraCountUI/releases");
+        String htmlUrl = release.optString("html_url", "https://github.com/TashiRabten/WorkLogUI/releases");
 
         if (latestVersion.isEmpty()) {
             System.err.println("❌ No tag_name found. \n❌ Não encontrou 'tag' de versão.");
@@ -175,7 +178,8 @@ public class AutoUpdater {
                         Files.copy(in, tempOutput, StandardCopyOption.REPLACE_EXISTING);
                     }
 
-                    Path userDownloads = Paths.get(System.getProperty("user.home"), "Downloads", fileName);
+                    Path userDownloads = AppConstants.EXPORT_FOLDER.resolve(fileName);
+                    Files.createDirectories(AppConstants.EXPORT_FOLDER); // ensure folder exists
                     Files.copy(tempOutput, userDownloads, StandardCopyOption.REPLACE_EXISTING);
                     Files.deleteIfExists(tempOutput);
 
@@ -208,7 +212,12 @@ public class AutoUpdater {
 
         root.getChildren().addAll(title, notes, releaseLink, bar, progress, buttons);
         stage.setScene(new Scene(root, 500, 450));
-        stage.getIcons().add(new Image(AutoUpdater.class.getResourceAsStream("/icons/BUDA.jpg")));
+        InputStream iconStream = AutoUpdater.class.getResourceAsStream("/icons/WorkLog.jpg");
+        if (iconStream != null) {
+            stage.getIcons().add(new Image(iconStream));
+        } else {
+            System.err.println("⚠️ Icon /icons/WorkLog.jpg not found");
+        }
         stage.show();
     }
 

@@ -1,19 +1,19 @@
-package com.example.worklogui;
+    package com.example.worklogui;
 
-import javafx.fxml.FXML;
-import javafx.scene.control.*;
-import javafx.stage.Stage;
-import javafx.beans.property.SimpleStringProperty;
-import javafx.geometry.Insets;
-import javafx.scene.layout.GridPane;
-import javafx.scene.layout.VBox;
+            import javafx.fxml.FXML;
+            import javafx.scene.control.*;
+            import javafx.stage.Stage;
+            import javafx.beans.property.SimpleStringProperty;
+            import javafx.geometry.Insets;
+            import javafx.scene.layout.GridPane;
+            import javafx.scene.layout.VBox;
 
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+            import java.time.LocalDate;
+            import java.time.format.DateTimeFormatter;
+            import java.time.format.DateTimeParseException;
+            import java.util.ArrayList;
+            import java.util.List;
+            import java.util.Optional;
 
 public class LogEditorController {
 
@@ -39,58 +39,28 @@ public class LogEditorController {
     private Button closeBtn;
 
     @FXML
-    private VBox rootContainer; // Add this if your root container is a VBox
+    private VBox rootContainer;
 
     private List<RegistroTrabalho> registros = new ArrayList<>();
     private Runnable onSaveCallback;
 
-    /**
-     * Sets the list of work log records to be displayed and edited.
-     * @param registros The list of RegistroTrabalho objects
-     */
     public void setRegistros(List<RegistroTrabalho> registros) {
         this.registros = registros;
         if (logTable != null) {
             refreshLogTable();
-        } else {
-            System.out.println("WARNING: logTable is null in setRegistros()");
         }
     }
 
-    /**
-     * Sets a callback to be executed when changes are saved.
-     * This allows the parent controller to refresh its data.
-     * @param callback The callback to execute after saving changes
-     */
     public void setOnSaveCallback(Runnable callback) {
         this.onSaveCallback = callback;
     }
 
     @FXML
     public void initialize() {
-        System.out.println("LogEditorController initializing...");
-
-        if (logTable == null) {
-            System.out.println("ERROR: logTable is null in initialize()!");
-            // Try to find the table in the scene
-            // This is a last resort and not ideal, but can help debug
-            return;
-        }
-
-        System.out.println("logTable successfully initialized");
-
-        // Clear any existing columns to avoid duplicates
         logTable.getColumns().clear();
-
-        // Setup table columns
         setupLogTable();
-
-        System.out.println("Table setup complete");
     }
 
-    /**
-     * Sets up the TableView columns and behavior.
-     */
     private void setupLogTable() {
         try {
             // Check if we already have the dateColumn from FXML
@@ -190,94 +160,64 @@ public class LogEditorController {
         }
     }
 
-    /**
-     * Refreshes the TableView with the current list of work logs.
-     */
     private void refreshLogTable() {
-        try {
-            logTable.getItems().clear();
-            logTable.getItems().addAll(registros);
-            System.out.println("Table refreshed with " + registros.size() + " items");
-        } catch (Exception e) {
-            System.out.println("Error refreshing table: " + e.getMessage());
-            e.printStackTrace();
-        }
+        logTable.getItems().clear();
+        logTable.getItems().addAll(registros);
     }
 
-    /**
-     * Handles the click event for the Edit button.
-     */
     @FXML
     public void onEditLog() {
         RegistroTrabalho selected = logTable.getSelectionModel().getSelectedItem();
         if (selected != null) {
             editLogEntry(selected);
         } else {
-            showAlert(Alert.AlertType.WARNING, "No Selection",
-                    "Please select a log entry to edit.");
+            showAlert(Alert.AlertType.WARNING, "No Selection / Nenhuma Seleção",
+                    "Please select a log entry to edit.\nPor favor, selecione um registro para editar.");
         }
     }
 
-    /**
-     * Handles the click event for the Delete button.
-     */
     @FXML
     public void onDeleteLog() {
         RegistroTrabalho selected = logTable.getSelectionModel().getSelectedItem();
         if (selected != null) {
             Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
-                    "Are you sure you want to delete this log entry?",
+                    "Are you sure you want to delete this log entry?\nTem certeza de que deseja excluir este registro?",
                     ButtonType.YES, ButtonType.NO);
-            confirmation.setHeaderText("Confirm Deletion");
+            confirmation.setHeaderText("Confirm Deletion / Confirmar Exclusão");
 
             confirmation.showAndWait().ifPresent(response -> {
                 if (response == ButtonType.YES) {
                     registros.remove(selected);
-                    saveAndRefreshLogs("Log entry deleted successfully.");
+                    saveAndRefreshLogs("✔ Log deleted.\n✔ Registro excluído.");
                 }
             });
         } else {
-            showAlert(Alert.AlertType.WARNING, "No Selection",
-                    "Please select a log entry to delete.");
+            showAlert(Alert.AlertType.WARNING, "No Selection / Nenhuma Seleção",
+                    "Please select a log entry to delete.\nPor favor, selecione um registro para excluir.");
         }
     }
 
-    /**
-     * Handles the click event for the Clear All Logs button.
-     */
     @FXML
     public void onClearAllLogs() {
         Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
-                "Are you sure you want to delete ALL log entries?\nThis action cannot be undone.",
+                "Are you sure you want to delete ALL log entries?\nTem certeza de que deseja excluir TODOS os registros?",
                 ButtonType.YES, ButtonType.NO);
-        confirmation.setHeaderText("Confirm Delete All");
+        confirmation.setHeaderText("Confirm Delete All / Confirmar Exclusão Total");
 
         confirmation.showAndWait().ifPresent(response -> {
             if (response == ButtonType.YES) {
                 registros.clear();
-                saveAndRefreshLogs("All log entries have been cleared.");
+                saveAndRefreshLogs("✔ All logs cleared.\n✔ Todos os registros foram excluídos.");
             }
         });
     }
 
-    /**
-     * Handles the click event for the Close button.
-     */
     @FXML
     public void onClose() {
-        try {
-            Stage stage = (Stage) closeBtn.getScene().getWindow();
-            stage.close();
-        } catch (Exception e) {
-            System.out.println("Error closing window: " + e.getMessage());
-            e.printStackTrace();
-        }
+        Stage stage = (Stage) closeBtn.getScene().getWindow();
+        stage.close();
     }
 
-    /**
-     * Opens a dialog to edit the selected work log entry.
-     * @param entry The work log entry to edit
-     */
     private void editLogEntry(RegistroTrabalho entry) {
         // Create a dialog for editing
         Dialog<RegistroTrabalho> dialog = new Dialog<>();
@@ -402,37 +342,19 @@ public class LogEditorController {
         });
     }
 
-    /**
-     * Saves the current state of the work log entries and refreshes the table view.
-     * @param successMessage The message to display on success
-     */
+
     private void saveAndRefreshLogs(String successMessage) {
         try {
-            // Save the updated logs to the file
             FileLoader.salvarRegistros(AppConstants.WORKLOG_PATH, registros);
-
-            // Refresh the table view
             refreshLogTable();
-
-            // Show success message
-            showAlert(Alert.AlertType.INFORMATION, "Success", successMessage);
-
-            // Execute the callback if provided
-            if (onSaveCallback != null) {
-                onSaveCallback.run();
-            }
+            if (onSaveCallback != null) onSaveCallback.run();
+            showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso", successMessage);
         } catch (Exception e) {
-            showAlert(Alert.AlertType.ERROR, "Error",
-                    "Failed to save changes: " + e.getMessage());
+            showAlert(Alert.AlertType.ERROR, "Error / Erro",
+                    "Failed to save changes:\nFalha ao salvar alterações:\n" + e.getMessage());
         }
     }
 
-    /**
-     * Shows an alert dialog with the specified type, title, and content.
-     * @param type The alert type
-     * @param title The alert title
-     * @param content The alert content
-     */
     private void showAlert(Alert.AlertType type, String title, String content) {
         Alert alert = new Alert(type);
         alert.setTitle(title);

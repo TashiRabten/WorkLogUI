@@ -14,7 +14,7 @@
                 <Insets top="10" right="10" bottom="10" left="10"/>
             </padding>
             <Label text="Date:"/>
-            <TextField fx:id="dateField" promptText="e.g. 05/01/2025"/>
+            <TextField fx:id="dateField" promptText="MM/DD/YYYY"/>
             <Label text="Company:"/>
             <ComboBox fx:id="jobTypeCombo" prefWidth="150"/>
             <Button fx:id="editCompaniesBtn" text="✎ Edit Companies" onAction="#handleEditCompanies"/>
@@ -38,7 +38,7 @@
             <!-- Action buttons -->
             <HBox spacing="10.0">
                 <Button text="Log Work" onAction="#onLogWork"/>
-                <Button text="Show Totals" onAction="#onShowTotal"/>
+                <Button text="Show Time" onAction="#onShowTotal"/>
                 <Button text="Show Earnings" onAction="#onShowEarnings"/>
                 <Button text="📊 Monthly/Yearly Summary" onAction="#onShowSummaryByMonthAndYear"/>
                 <Button text="📤 Export CSV" onAction="#onExportCsv"/>
