@@ -23,6 +23,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.file.*;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -186,7 +187,27 @@ public class AutoUpdater {
                     updateMessage("🚀 Opening installer...\nAbrindo instalador...");
                     try {
                         Desktop.getDesktop().open(userDownloads.toFile());
-                        updateMessage("✅ Installer launched. Close this app to continue.\n✅ Instalador iniciado. Feche este aplicativo para continuar.");
+                        updateMessage("✅ Installer launched.\n✅ Instalador iniciado.");
+
+                        Platform.runLater(() -> {
+                            Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+                            alert.setTitle("Close App to Finish Installation");
+                            alert.setHeaderText("⚠️ The app needs to close to complete the update.\n⚠️ O aplicativo precisa ser fechado para concluir a atualização.");
+                            alert.setContentText("Do you want to close the app now?\nDeseja fechar o aplicativo agora?");
+
+                            ButtonType yes = new ButtonType("✅ Yes / Sim");
+                            ButtonType no = new ButtonType("❌ No / Não", ButtonBar.ButtonData.CANCEL_CLOSE);
+                            alert.getButtonTypes().setAll(yes, no);
+
+                            Optional<ButtonType> result = alert.showAndWait();
+                            if (result.isPresent() && result.get() == yes) {
+                                Platform.exit();
+                                System.exit(0);
+                            } else {
+                                updateMessage("❗ Please close the app manually to finish installation.\n❗ Por favor, feche o aplicativo manualmente.");
+                            }
+                        });
+
                     } catch (Exception ex) {
                         updateMessage("❗ Could not open installer automatically.\n❗ Não foi possível abrir o instalador automaticamente.");
                     }
