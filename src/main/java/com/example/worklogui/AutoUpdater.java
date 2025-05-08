@@ -169,7 +169,7 @@ public class AutoUpdater {
             Task<Void> installTask = new Task<>() {
                 @Override
                 protected Void call() throws Exception {
-                    updateMessage("⬇️ Downloading installer...\n⬇️ Baixando instalador...");
+                    updateMessage("⬇ Downloading installer...\n⬇ Baixando instalador...");
 
                     Path tempDir = Files.createTempDirectory("worklog-update");
                     String fileName = url.substring(url.lastIndexOf('/') + 1);
@@ -180,33 +180,21 @@ public class AutoUpdater {
                     }
 
                     Path userDownloads = AppConstants.EXPORT_FOLDER.resolve(fileName);
-                    Files.createDirectories(AppConstants.EXPORT_FOLDER); // ensure folder exists
+                    Files.createDirectories(AppConstants.EXPORT_FOLDER);
                     Files.copy(tempOutput, userDownloads, StandardCopyOption.REPLACE_EXISTING);
                     Files.deleteIfExists(tempOutput);
 
                     updateMessage("🚀 Opening installer...\nAbrindo instalador...");
                     try {
                         Desktop.getDesktop().open(userDownloads.toFile());
-                        updateMessage("✅ Installer launched.\n✅ Instalador iniciado.");
+                        updateMessage("✅ Installer launched. Closing app...\n✅ Instalador iniciado. Fechando o aplicativo...");
 
-                        Platform.runLater(() -> {
-                            Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-                            alert.setTitle("Close App to Finish Installation");
-                            alert.setHeaderText("⚠️ The app needs to close to complete the update.\n⚠️ O aplicativo precisa ser fechado para concluir a atualização.");
-                            alert.setContentText("Do you want to close the app now?\nDeseja fechar o aplicativo agora?");
+                        // Give user a second before shutdown
+                        Thread.sleep(1500);
 
-                            ButtonType yes = new ButtonType("✅ Yes / Sim");
-                            ButtonType no = new ButtonType("❌ No / Não", ButtonBar.ButtonData.CANCEL_CLOSE);
-                            alert.getButtonTypes().setAll(yes, no);
-
-                            Optional<ButtonType> result = alert.showAndWait();
-                            if (result.isPresent() && result.get() == yes) {
-                                Platform.exit();
-                                System.exit(0);
-                            } else {
-                                updateMessage("❗ Please close the app manually to finish installation.\n❗ Por favor, feche o aplicativo manualmente.");
-                            }
-                        });
+                        // 🔻 Force close
+                        Platform.exit();
+                        System.exit(0);
 
                     } catch (Exception ex) {
                         updateMessage("❗ Could not open installer automatically.\n❗ Não foi possível abrir o instalador automaticamente.");
@@ -214,6 +202,7 @@ public class AutoUpdater {
                     return null;
                 }
             };
+
 
             bar.progressProperty().bind(installTask.progressProperty());
             progress.textProperty().bind(installTask.messageProperty());
