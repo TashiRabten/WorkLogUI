@@ -2,18 +2,21 @@ package com.example.worklogui;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+
 
 import java.io.IOException;
 import java.nio.file.*;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class FileLoader {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
 
+    private static final ObjectMapper objectMapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Optional: makes dates readable
 
-    // Always write to a user-writable folder
     private static final Path RATES_PATH = Paths.get(
             System.getProperty("user.home"),
             "Documents", "WorkLog", "company-rates.json"
@@ -23,14 +26,66 @@ public class FileLoader {
         return AppConstants.WORKLOG_PATH;
     }
 
+    private static WorkLogData cache = null;
 
-    /**
-     * Load work log entries from JSON file
-     */
-    public static List<RegistroTrabalho> carregarRegistros(Path path) {
-        if (!Files.exists(path)) {
-            return new ArrayList<>();
+    public static void inicializarArquivo(Path path) {
+        try {
+            Files.createDirectories(path.getParent());
+
+            if (!Files.exists(path)) {
+                salvarTudo(path, new WorkLogData());
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
+    }
+
+    public static WorkLogData carregarTudo(Path path) {
+        if (!Files.exists(path)) return new WorkLogData();
+
+        try {
+            // Try loading full structure
+            return objectMapper.readValue(path.toFile(), WorkLogData.class);
+        } catch (Exception e) {
+            // Fallback: try to load as raw list
+            try {
+                List<RegistroTrabalho> rawList = objectMapper.readValue(path.toFile(), new TypeReference<>() {});
+                WorkLogData fallback = new WorkLogData();
+                fallback.setRegistros(rawList);
+                fallback.setBills(new HashMap<>());
+                salvarTudo(path, fallback); // upgrade file
+                return fallback;
+            } catch (Exception inner) {
+                inner.printStackTrace();
+                return new WorkLogData();
+            }
+        }
+    }
+
+
+    public static void salvarTudo(Path path, WorkLogData data) {
+        try {
+            Files.createDirectories(path.getParent());
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), data);
+            cache = data;
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Helper accessors
+    public static List<RegistroTrabalho> carregarRegistros(Path path) {
+        return carregarTudo(path).getRegistros();
+    }
+
+    public static void salvarRegistros(Path path, List<RegistroTrabalho> registros) {
+        WorkLogData data = carregarTudo(path);
+        data.setRegistros(registros);
+        salvarTudo(path, data);
+    }
+
+    public static List<Bill> carregarBills(Path path) {
+        if (!Files.exists(path)) return new ArrayList<>();
         try {
             return objectMapper.readValue(path.toFile(), new TypeReference<>() {});
         } catch (IOException e) {
@@ -39,41 +94,13 @@ public class FileLoader {
         }
     }
 
-    /**
-     * Save work log entries to JSON file
-     */
-    public static void salvarRegistros(Path path, List<RegistroTrabalho> registros) {
+    public static void salvarBills(Path path, List<Bill> bills) {
         try {
-            Files.createDirectories(path.getParent()); // ✅ Ensure parent directory exists
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), registros);
+            Files.createDirectories(path.getParent());
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), bills);
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
-
-    /**
-     * Ensure the JSON file exists (create empty if not)
-     */public static void inicializarArquivo(Path path) {
-        if (path == null) {
-            System.err.println("❌ Caminho nulo fornecido para inicializarArquivo");
-            return;
-        }
-
-        try {
-            Files.createDirectories(path.getParent()); // ✅ ensure parent directory exists
-
-            if (!Files.exists(path)) {
-                salvarRegistros(path, new ArrayList<>());
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-
-
-
 
 }
-
-
