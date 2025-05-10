@@ -94,12 +94,17 @@ public class FileLoader {
         }
     }
 
-    public static void salvarBills(Path path, List<Bill> bills) {
+    public static boolean salvarBills(Path path, List<Bill> bills) {
         try {
             Files.createDirectories(path.getParent());
+            System.out.println("🔍 DIRECT DEBUG: About to write to " + path.toAbsolutePath());
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), bills);
+            System.out.println("✅ DIRECT DEBUG: Successfully wrote to " + path.getFileName());
+            return true;
         } catch (IOException e) {
+            System.out.println("❌ DIRECT ERROR: Failed to write bills to " + path.getFileName() + ": " + e.getMessage());
             e.printStackTrace();
+            return false;
         }
     }
 

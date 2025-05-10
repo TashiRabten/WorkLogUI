@@ -47,7 +47,7 @@
             <Button text="Show Time" onAction="#onShowTotal"/>
             <Button text="Show Earnings" onAction="#onShowEarnings"/>
             <Button text="📊 Monthly/Yearly Summary" onAction="#onShowSummaryByMonthAndYear"/>
-            <Button text="📤 Export CSV" onAction="#onExportCsv"/>
+            <Button text="📤 Export Excel" onAction="#onExportExcel"/>
             <Button fx:id="openLogEditorBtn" text="📋 View/Edit Logs" onAction="#onOpenLogEditor" />
         </HBox>
 

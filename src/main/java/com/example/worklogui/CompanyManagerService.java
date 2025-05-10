@@ -11,6 +11,7 @@ public class CompanyManagerService {
 
     private static final Path WORKLOG_PATH = FileLoader.getDefaultPath();
     private static final Path BILLS_DIR = Paths.get(System.getProperty("user.home"), "Documents", "WorkLog", "bills");
+    // CRITICAL: Changed to always use new list instances for values to avoid shared references
     private Map<String, List<Bill>> bills = new HashMap<>();
 
     private List<RegistroTrabalho> registros = new ArrayList<>();
@@ -78,13 +79,84 @@ public class CompanyManagerService {
     }
 
     public List<Bill> getBillsForMonth(String yearMonth) {
-        return carregarBills(getBillPath(yearMonth));
+        if (!this.bills.containsKey(yearMonth)) {
+            Path path = getBillPath(yearMonth);
+            System.out.println("🔍 DEBUG: Loading bills from: " + path);
+            List<Bill> result = carregarBills(path);
+            // Store a defensive copy
+            this.bills.put(yearMonth, new ArrayList<>(result));
+            System.out.println("🔍 DEBUG: Loaded " + result.size() + " bills");
+        }
+        // Return a defensive copy
+        return new ArrayList<>(this.bills.getOrDefault(yearMonth, new ArrayList<>()));
     }
 
-    public void setBillsForMonth(String yearMonth, List<Bill> bills) throws Exception {
+    public void setBillsForMonth(String yearMonth, List<Bill> billList) throws Exception {
         Path path = getBillPath(yearMonth);
         Files.createDirectories(path.getParent());
-        FileLoader.salvarBills(path, bills);
+
+        System.out.println("🔍 DEBUG: setBillsForMonth() called with yearMonth = " + yearMonth);
+        System.out.println("🔍 DEBUG: Target path = " + path.toAbsolutePath());
+        System.out.println("🔍 DEBUG: Number of bills = " + billList.size());
+
+        if (billList.isEmpty()) {
+            try {
+                if (Files.exists(path)) {
+                    // Add more detailed debug before deletion
+                    System.out.println("🔍 DEBUG: File exists: " + path.toAbsolutePath());
+                    System.out.println("🔍 DEBUG: File readable: " + Files.isReadable(path));
+                    System.out.println("🔍 DEBUG: File writable: " + Files.isWritable(path));
+
+                    try {
+                        Files.delete(path);
+                        // Verify deletion immediately
+                        boolean stillExists = Files.exists(path);
+                        System.out.println("🔍 DEBUG: After delete call, file exists: " + stillExists);
+                        if (stillExists) {
+                            System.out.println("⚠️ WARNING: File still exists after deletion attempt!");
+                        } else {
+                            System.out.println("🗑 DEBUG: Successfully deleted file " + path.getFileName());
+                        }
+                    } catch (Exception e) {
+                        System.out.println("⚠️ DELETION ERROR: " + e.getClass().getName() + ": " + e.getMessage());
+                        throw e; // Re-throw for proper handling
+                    }
+                } else {
+                    System.out.println("✅ DEBUG: File already does not exist, no need to delete.");
+                }
+                // Remove from cache when file is deleted
+                this.bills.remove(yearMonth);
+                System.out.println("🔄 DEBUG: Removed " + yearMonth + " from bills cache");
+            } catch (IOException e) {
+                System.out.println("❌ ERROR: Could not delete bill file " + path.getFileName());
+                e.printStackTrace();
+                throw e; // Propagate error for proper handling
+            }
+        } else {
+            try {
+                boolean success = FileLoader.salvarBills(path, billList);
+                if (success) {
+                    // Update cache with a defensive copy
+                    this.bills.put(yearMonth, new ArrayList<>(billList));
+                    System.out.println("💾 DEBUG: Saved " + billList.size() + " bills to file.");
+                } else {
+                    System.out.println("❌ ERROR: Failed to save bills to file, not updating cache.");
+                    throw new IOException("Failed to save bills to " + path.getFileName());
+                }
+            } catch (IOException e) {
+                System.out.println("❌ ERROR: Could not save bills file " + path.getFileName());
+                e.printStackTrace();
+                throw e;
+            }
+        }
+
+        // Verify file state after operation
+        System.out.println("🔍 DEBUG: Final file state - exists: " + Files.exists(path));
+    }
+
+    public void clearBillCache() {
+        this.bills.clear(); // Clear the cache to force reload from disk
+        System.out.println("🔄 DEBUG: Bill cache cleared");
     }
 
     public Path getBillPath(String yearMonth) {
@@ -118,20 +190,19 @@ public class CompanyManagerService {
                     match &= String.format("%02d", date.getMonthValue()).equals(month);
                 }
 
-                // ✅ Handle "All" or null as no filter
+                // Handle "All" or null as no filter
                 if (company != null && !company.equalsIgnoreCase("All") && !company.isEmpty()) {
                     match &= company.equals(r.getEmpresa());
                 }
 
                 if (match) filtered.add(r);
             } catch (Exception e) {
-                System.err.println("⚠️ Skipping invalid date: " + r.getData());
+                System.err.println("⚠ Skipping invalid date: " + r.getData());
             }
         }
 
         return filtered;
     }
-
 
     public void populateFilters() {
         years.clear();
@@ -158,6 +229,35 @@ public class CompanyManagerService {
     public Set<String> getYears() { return years; }
     public Set<String> getMonths() { return months; }
     public Set<String> getCompanies() { return companies; }
+
+    // CRITICAL FIX: Modified to get all bills from disk, ensuring no cached data is used
+    public Map<String, List<Bill>> getAllBills() {
+        // Always create a fresh map
+        Map<String, List<Bill>> all = new HashMap<>();
+
+        // Clear cache first to ensure we reload from disk
+        this.bills.clear();
+
+        if (Files.exists(BILLS_DIR)) {
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(BILLS_DIR, "*.json")) {
+                for (Path path : stream) {
+                    String filename = path.getFileName().toString(); // e.g., "2026-12.json"
+                    String ym = filename.replace(".json", "");
+                    List<Bill> billList = carregarBills(path);
+                    if (!billList.isEmpty()) {
+                        // Update cache with a defensive copy
+                        this.bills.put(ym, new ArrayList<>(billList));
+                        // Add to result map
+                        all.put(ym, new ArrayList<>(billList));
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        return all;
+    }
 
     public String calculateTimeTotal() {
         Map<String, double[]> totais = new HashMap<>();
@@ -250,23 +350,23 @@ public class CompanyManagerService {
         return sb.toString();
     }
 
-    public Map<String, List<Bill>> getAllBills() {
-        return bills; // assuming `private Map<String, List<Bill>> bills;` is declared and populated
-    }
-
-
-
-    public void exportToCsv() throws IOException {
+    public void exportToExcel() throws IOException {
         List<DisplayEntry> allEntries = new ArrayList<>();
         for (RegistroTrabalho r : registros) {
             allEntries.add(new DisplayEntry(r));
         }
+
+        // Clear bill cache to ensure fresh data
+        clearBillCache();
+
         for (List<Bill> monthlyBills : getAllBills().values()) {
             allEntries.addAll(monthlyBills.stream().map(DisplayEntry::new).toList());
         }
         allEntries.sort(Comparator.comparing(DisplayEntry::getDate));
-        CsvExporter.exportToCsv(allEntries, this);
+        boolean isAllExport = true;
+        ExcelExporter.exportToExcel(allEntries, this, isAllExport);
     }
-
-
 }
+
+
+
