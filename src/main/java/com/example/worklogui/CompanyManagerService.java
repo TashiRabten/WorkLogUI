@@ -98,44 +98,27 @@ public class CompanyManagerService {
         if (billList.isEmpty()) {
             try {
                 if (Files.exists(path)) {
-                    System.out.println("File exists: " + path.toAbsolutePath());
-                    System.out.println("File readable: " + Files.isReadable(path));
-                    System.out.println("File writable: " + Files.isWritable(path));
-
-                    try {
-                        Files.delete(path);
-                        // Verify deletion immediately
-                        boolean stillExists = Files.exists(path);
-                        System.out.println("🔍 After delete call, file exists: " + stillExists);
-                        if (stillExists) {
-                            System.out.println("⚠ WARNING: File still exists after deletion attempt!");
-                        } else {
-                            System.out.println("🗑 Successfully deleted file " + path.getFileName());
-                        }
-                    } catch (Exception e) {
-                        System.out.println("⚠ DELETION ERROR: " + e.getClass().getName() + ": " + e.getMessage());
-                        throw e; // Re-throw for proper handling
-                    }
-                } else {
-                    System.out.println("✅ File already does not exist, no need to delete.");
+                    System.out.println("Deleting empty bill file: " + path);
+                    Files.delete(path);
                 }
                 // Remove from cache when file is deleted
                 this.bills.remove(yearMonth);
-                System.out.println("🔄 Removed " + yearMonth + " from bills cache");
+                System.out.println("Removed " + yearMonth + " from bills cache");
             } catch (IOException e) {
                 System.out.println("❌ ERROR: Could not delete bill file " + path.getFileName());
                 e.printStackTrace();
-                throw e; // Propagate error for proper handling
+                throw e;
             }
         } else {
             try {
+                System.out.println("Saving " + billList.size() + " bills to " + yearMonth);
                 boolean success = FileLoader.salvarBills(path, billList);
                 if (success) {
                     // Update cache with a defensive copy
                     this.bills.put(yearMonth, new ArrayList<>(billList));
                     System.out.println("💾 Saved " + billList.size() + " bills to file.");
                 } else {
-                    System.out.println("❌ ERROR: Failed to save bills to file, not updating cache.");
+                    System.out.println("❌ ERROR: Failed to save bills to file");
                     throw new IOException("Failed to save bills to " + path.getFileName());
                 }
             } catch (IOException e) {
@@ -147,6 +130,9 @@ public class CompanyManagerService {
 
         // Verify file state after operation
         System.out.println("Final file state - exists: " + Files.exists(path));
+        if (Files.exists(path)) {
+            System.out.println("File size: " + Files.size(path) + " bytes");
+        }
     }
 
     public void clearBillCache() {

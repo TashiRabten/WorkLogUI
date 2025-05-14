@@ -31,9 +31,16 @@ public class DisplayEntry {
     }
 
     public String getLabel() {
-        return isBill() ? bill.getLabel() : registro.getEmpresa();
+        if (isBill()) {
+            // For bills, try both getLabel() and getDescription()
+            String label = bill.getLabel();
+            if (label == null || label.isEmpty()) {
+                label = bill.getDescription();
+            }
+            return label != null ? label : "Unknown Bill";
+        }
+        return registro != null ? registro.getEmpresa() : "Unknown";
     }
-
     public double getHoras() {
         return registro != null ? registro.getHoras() : 0;
     }
@@ -62,4 +69,6 @@ public class DisplayEntry {
     public Bill getBill() {
         return bill;
     }
+
+
 }

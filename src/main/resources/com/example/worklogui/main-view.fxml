@@ -42,13 +42,14 @@
             <Button text="Log Work" onAction="#onLogWork"/>
         </HBox>
 
-        <!-- Action buttons -->
+        <!-- Updated main-view.fxml with clean UI -->
         <HBox spacing="10.0" alignment="CENTER_LEFT">
             <Button text="Show Time" onAction="#onShowTotal"/>
             <Button text="Show Earnings" onAction="#onShowEarnings"/>
             <Button text="📊 Monthly/Yearly Summary" onAction="#onShowSummaryByMonthAndYear"/>
             <Button text="📤 Export Excel" onAction="#onExportExcel"/>
             <Button fx:id="openLogEditorBtn" text="📋 View/Edit Logs" onAction="#onOpenLogEditor" />
+            <Button text="💸 Edit Bills" fx:id="editBillsBtn" onAction="#onEditBills"/>
         </HBox>
 
         <!-- TableView for logs -->

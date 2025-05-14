@@ -11,6 +11,8 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.stage.Stage;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -39,6 +41,7 @@ public class CompanyManagerUI {
     @FXML private TableColumn<DisplayEntry, Double> minutesCol;
     @FXML private TableColumn<DisplayEntry, Boolean> doublePayCol;
     @FXML private TableColumn<DisplayEntry, String> earningsCol;
+    @FXML private Button showAGIReportBtn;
 
     private final CompanyManagerService service = new CompanyManagerService();
     private ObservableList<DisplayEntry> displayEntries = FXCollections.observableArrayList();
@@ -400,6 +403,7 @@ public class CompanyManagerUI {
         }
     }
 
+
     @FXML
     public void onApplyFilter() {
         String selectedYear = yearFilter.getValue();
@@ -415,8 +419,8 @@ public class CompanyManagerUI {
         boolean allYears = "All".equals(y);
 
         List<DisplayEntry> combined = new ArrayList<>();
-        double grossTotal = 0.0;
-        double billTotal = 0.0;
+        List<RegistroTrabalho> filteredRegistros = new ArrayList<>();
+        List<Bill> filteredBills = new ArrayList<>();
 
         // Clear bill cache to ensure fresh data
         service.clearBillCache();
@@ -424,43 +428,43 @@ public class CompanyManagerUI {
         if (allYears) {
             for (String year : yearToMonthsMap.keySet()) {
                 List<RegistroTrabalho> logs = service.applyFilters(year, m, c);
+                filteredRegistros.addAll(logs);
                 for (RegistroTrabalho r : logs) {
                     combined.add(new DisplayEntry(r));
-                    grossTotal += service.calculateEarnings(r);
                 }
 
                 for (String month : yearToMonthsMap.getOrDefault(year, Collections.emptyList())) {
-                    // Only include this month if month filter is null or matches
                     if (m == null || month.equals(m)) {
-                        for (Bill b : service.getBillsForMonth(year + "-" + month)) {
+                        List<Bill> monthBills = service.getBillsForMonth(year + "-" + month);
+                        filteredBills.addAll(monthBills);
+                        for (Bill b : monthBills) {
                             combined.add(new DisplayEntry(b));
-                            billTotal += b.getAmount();
                         }
                     }
                 }
             }
         } else {
             List<RegistroTrabalho> logs = service.applyFilters(y, m, c);
+            filteredRegistros.addAll(logs);
             for (RegistroTrabalho r : logs) {
                 combined.add(new DisplayEntry(r));
-                grossTotal += service.calculateEarnings(r);
             }
 
             if (y != null) {
                 if (m != null) {
-                    // Specific year and month
                     String ym = y + "-" + m;
-                    for (Bill b : service.getBillsForMonth(ym)) {
+                    List<Bill> monthBills = service.getBillsForMonth(ym);
+                    filteredBills.addAll(monthBills);
+                    for (Bill b : monthBills) {
                         combined.add(new DisplayEntry(b));
-                        billTotal += b.getAmount();
                     }
                 } else {
-                    // Specific year, all months
                     for (String month : yearToMonthsMap.getOrDefault(y, Collections.emptyList())) {
                         String ym = y + "-" + month;
-                        for (Bill b : service.getBillsForMonth(ym)) {
+                        List<Bill> monthBills = service.getBillsForMonth(ym);
+                        filteredBills.addAll(monthBills);
+                        for (Bill b : monthBills) {
                             combined.add(new DisplayEntry(b));
-                            billTotal += b.getAmount();
                         }
                     }
                 }
@@ -469,26 +473,53 @@ public class CompanyManagerUI {
 
         updateTable(combined);
         logTable.refresh();
-        double net = grossTotal - billTotal;
 
-        netTotalLabel.setText(String.format("📈 Gross: $%.2f    💸 Bills: $%.2f    📉 Net Total: $%.2f", grossTotal, billTotal, net));
+        // Calculate AGI using the new calculator
+        AGICalculator.AGIResult agiResult = AGICalculator.calculateAGI(filteredRegistros, filteredBills);
 
-        // Set the status message but preserve warnings
-        setStatusMessage(String.format("✔ Filter applied. Showing %d entries.", combined.size()));
+        // Create detailed label
+        String detailText = String.format(
+                "📈 Gross: $%.2f | 💸 Expenses: $%.2f | 📉 Net: $%.2f | 📊 NESE: $%.2f | 🏛 AGI: $%.2f",
+                agiResult.grossIncome,
+                agiResult.businessExpenses,
+                agiResult.netEarnings,
+                agiResult.nese,
+                agiResult.adjustedGrossIncome
+        );
+        netTotalLabel.setText(detailText);
+
+        // Use existing WarningUtils for warnings
         if (!allYears && m != null) {
-            String warning = WarningUtils.generateFilteredWarning(service.getRegistros(), selectedYear, selectedMonth);
-            if (warning != null) {
-                setWarning(warning);
+            String filterWarning = WarningUtils.generateFilteredWarning(service.getRegistros(), selectedYear, selectedMonth);
 
-                // Show popup for filtered month if needed
-                javafx.application.Platform.runLater(() -> {
-                    WarningUtils.showFilteredPopupWarningIfNeeded(service.getRegistros(), selectedYear, selectedMonth);
-                });
+            // Add SGA warning if needed
+            int year = selectedYear != null ? Integer.parseInt(selectedYear) : LocalDate.now().getYear();
+            double monthlyIncome = agiResult.monthlySSACountableIncome;
+            double sgaLimit = AGICalculator.getSGALimit(year);
+
+            if (AGICalculator.exceedsSGALimit(monthlyIncome, year)) {
+                String sgaWarning = String.format(
+                        "⚠️ SGA Warning: Monthly NESE ($%.2f) exceeds SGA limit ($%.2f)\n" +
+                                "⚠️ Aviso SGA: NESE mensal ($%.2f) excede o limite SGA ($%.2f)",
+                        monthlyIncome, sgaLimit, monthlyIncome, sgaLimit
+                );
+
+                if (filterWarning != null) {
+                    setWarning(filterWarning + "\n\n" + sgaWarning);
+                } else {
+                    setWarning(sgaWarning);
+                }
+            } else if (filterWarning != null) {
+                setWarning(filterWarning);
             } else {
                 clearWarning();
             }
+
+            // Show popup for filtered month if needed
+            javafx.application.Platform.runLater(() -> {
+                WarningUtils.showFilteredPopupWarningIfNeeded(service.getRegistros(), selectedYear, selectedMonth);
+            });
         } else {
-            // If we're showing all data, use the current month warning instead
             String warning = WarningUtils.generateCurrentMonthWarning(service.getRegistros());
             if (warning != null) {
                 setWarning(warning);
@@ -496,9 +527,24 @@ public class CompanyManagerUI {
                 clearWarning();
             }
         }
-}
 
+        // Set the status message with category breakdown
+        StringBuilder statusMsg = new StringBuilder();
+        statusMsg.append(String.format("✔ Filter applied. Showing %d entries.\n\n", combined.size()));
 
+        if (!agiResult.expensesByCategory.isEmpty()) {
+            statusMsg.append("Expense Breakdown:\n");
+            agiResult.expensesByCategory.entrySet().stream()
+                    .sorted(Map.Entry.<ExpenseCategory, Double>comparingByValue().reversed())
+                    .forEach(entry -> {
+                        statusMsg.append(String.format("  %s: $%.2f\n",
+                                entry.getKey().getDisplayName(),
+                                entry.getValue()));
+                    });
+        }
+
+        setStatusMessage(statusMsg.toString());
+    }
 
     private void updateTable(List<DisplayEntry> entries) {
         entries.sort(Comparator.comparing(DisplayEntry::getDate));
@@ -703,53 +749,84 @@ public class CompanyManagerUI {
 
     @FXML
     public void onExportExcel() {
-        Alert choiceAlert = new Alert(Alert.AlertType.CONFIRMATION);
-        choiceAlert.setTitle("Export Options");
-        choiceAlert.setHeaderText("Choose export mode");
-        choiceAlert.setContentText("Do you want to export all records, or only the ones currently filtered?\n\n"
-                + "Deseja exportar todos os registros ou apenas os filtrados?");
+        try {
+            Alert choiceAlert = new Alert(Alert.AlertType.CONFIRMATION);
+            choiceAlert.setTitle("Export Options");
+            choiceAlert.setHeaderText("Choose export mode");
+            choiceAlert.setContentText("Do you want to export all records, or only the ones currently filtered?\n\n"
+                    + "Deseja exportar todos os registros ou apenas os filtrados?");
 
-        ButtonType exportFiltered = new ButtonType("Only Filtered / Apenas Filtrados");
-        ButtonType exportAll = new ButtonType("Export All / Exportar Tudo");
-        ButtonType cancel = new ButtonType("Cancel / Cancelar", ButtonBar.ButtonData.CANCEL_CLOSE);
+            ButtonType exportFiltered = new ButtonType("Only Filtered / Apenas Filtrados");
+            ButtonType exportAll = new ButtonType("Export All / Exportar Tudo");
+            ButtonType cancel = new ButtonType("Cancel / Cancelar", ButtonBar.ButtonData.CANCEL_CLOSE);
 
-        choiceAlert.getButtonTypes().setAll(exportFiltered, exportAll, cancel);
+            choiceAlert.getButtonTypes().setAll(exportFiltered, exportAll, cancel);
 
-        Optional<ButtonType> result = choiceAlert.showAndWait();
+            Optional<ButtonType> result = choiceAlert.showAndWait();
 
-        if (result.isEmpty() || result.get() == cancel) {
-            setStatusMessage("❌ Export canceled.\n❌ Exportação cancelada.");
-            return;
-        }
-
-        List<DisplayEntry> entriesToExport = new ArrayList<>();
-
-        if (result.get() == exportAll) {
-            for (RegistroTrabalho r : service.getRegistros()) {
-                entriesToExport.add(new DisplayEntry(r));
+            if (result.isEmpty() || result.get() == cancel) {
+                setStatusMessage("❌ Export canceled.\n❌ Exportação cancelada.");
+                return;
             }
 
-            // Clear bill cache to ensure fresh data
-            service.clearBillCache();
+            List<DisplayEntry> entriesToExport = new ArrayList<>();
 
-            for (String year : yearToMonthsMap.keySet()) {
-                for (String month : yearToMonthsMap.getOrDefault(year, Collections.emptyList())) {
-                    for (Bill b : service.getBillsForMonth(year + "-" + month)) {
-                        entriesToExport.add(new DisplayEntry(b));
+            if (result.get() == exportAll) {
+                for (RegistroTrabalho r : service.getRegistros()) {
+                    entriesToExport.add(new DisplayEntry(r));
+                }
+
+                // Clear bill cache to ensure fresh data
+                service.clearBillCache();
+
+                for (String year : yearToMonthsMap.keySet()) {
+                    for (String month : yearToMonthsMap.getOrDefault(year, Collections.emptyList())) {
+                        for (Bill b : service.getBillsForMonth(year + "-" + month)) {
+                            entriesToExport.add(new DisplayEntry(b));
+                        }
                     }
                 }
+            } else {
+                entriesToExport.addAll(displayEntries);  // current filtered view
             }
-        } else {
-            entriesToExport.addAll(displayEntries);  // current filtered view
-        }
 
-        try {
-            boolean isAllExport = (result.get() == exportAll);
-            ExcelExporter.exportToExcel(entriesToExport, service, isAllExport);
-            setStatusMessage("✔ Exported to 'documents/worklog/exports'.\n✔ Exportado para a pasta 'documents/worklog/exports'.");
-        } catch (IOException e) {
-            setStatusMessage("❌ Export error: " + e.getMessage() + "\n❌ Erro na exportação: " + e.getMessage());
-            e.printStackTrace();
+            try {
+                boolean isAllExport = (result.get() == exportAll);
+                ExcelExporter.exportToExcel(entriesToExport, service, isAllExport);
+                setStatusMessage("✔ Exported to 'documents/worklog/exports'.\n✔ Exportado para a pasta 'documents/worklog/exports'.");
+
+                // Show success alert with file location
+                Alert successAlert = new Alert(Alert.AlertType.INFORMATION);
+                successAlert.setTitle("Export Successful / Exportação Bem-sucedida");
+                successAlert.setHeaderText(null);
+                successAlert.setContentText("Excel file exported successfully to:\n" +
+                        AppConstants.EXPORT_FOLDER.toAbsolutePath() + "\n\n" +
+                        "Arquivo Excel exportado com sucesso para:\n" +
+                        AppConstants.EXPORT_FOLDER.toAbsolutePath());
+                successAlert.showAndWait();
+
+            } catch (IOException e) {
+                setStatusMessage("❌ Export error: " + e.getMessage() + "\n❌ Erro na exportação: " + e.getMessage());
+                e.printStackTrace();
+
+                // Show detailed error alert
+                Alert errorAlert = new Alert(Alert.AlertType.ERROR);
+                errorAlert.setTitle("Export Error / Erro de Exportação");
+                errorAlert.setHeaderText("Failed to export Excel file / Falha ao exportar arquivo Excel");
+                errorAlert.setContentText("Error details / Detalhes do erro:\n" + e.getMessage() +
+                        "\n\nExport path / Caminho de exportação:\n" +
+                        AppConstants.EXPORT_FOLDER.toAbsolutePath());
+                errorAlert.showAndWait();
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            Alert errorAlert = new Alert(Alert.AlertType.ERROR);
+            errorAlert.setTitle("Unexpected Error / Erro Inesperado");
+            errorAlert.setHeaderText("An unexpected error occurred / Ocorreu um erro inesperado");
+            errorAlert.setContentText("Error: " + ex.getMessage() + "\n\n" +
+                    "Please check the console for more details.\n" +
+                    "Por favor, verifique o console para mais detalhes.");
+            errorAlert.showAndWait();
         }
     }
 
@@ -772,4 +849,5 @@ public class CompanyManagerUI {
             });
         }
     }
+
 }

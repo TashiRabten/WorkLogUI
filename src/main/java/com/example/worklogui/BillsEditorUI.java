@@ -1,3 +1,4 @@
+
 package com.example.worklogui;
 
 import javafx.collections.FXCollections;
@@ -221,60 +222,11 @@ public class BillsEditorUI {
         stage.setTitle(AppConstants.APP_TITLE + " - Edit Bills");
         stage.initModality(Modality.WINDOW_MODAL);
         stage.initOwner(parentStage);
-        stage.setScene(new Scene(layout, 600, 400));
+        stage.setScene(new Scene(layout, 700, 400));
         if (getClass().getResource("/style.css") != null) {
             stage.getScene().getStylesheets().add(getClass().getResource("/style.css").toExternalForm());
         }
         stage.show();
-    }
-
-    private void setupTableColumns() {
-        TableColumn<Bill, LocalDate> dateCol = new TableColumn<>("Date");
-        dateCol.setCellValueFactory(cell -> new javafx.beans.property.SimpleObjectProperty<>(cell.getValue().getDate()));
-        dateCol.setCellFactory(col -> new TableCell<>() {
-            @Override
-            protected void updateItem(LocalDate date, boolean empty) {
-                super.updateItem(date, empty);
-                setText((empty || date == null) ? null : date.format(displayFormatter));
-            }
-        });
-        dateCol.setPrefWidth(100);
-
-        TableColumn<Bill, String> descCol = new TableColumn<>("Description");
-        descCol.setCellValueFactory(cell -> new javafx.beans.property.SimpleStringProperty(cell.getValue().getDescription()));
-        descCol.setPrefWidth(250);
-
-        TableColumn<Bill, Double> amountCol = new TableColumn<>("Amount");
-        amountCol.setCellValueFactory(cell -> new javafx.beans.property.SimpleObjectProperty<>(cell.getValue().getAmount()));
-        amountCol.setCellFactory(col -> new TableCell<>() {
-            @Override
-            protected void updateItem(Double amount, boolean empty) {
-                super.updateItem(amount, empty);
-                setText((empty || amount == null) ? null : String.format("$%.2f", amount));
-            }
-        });
-        amountCol.setPrefWidth(100);
-
-        TableColumn<Bill, Boolean> paidCol = new TableColumn<>("Paid");
-        paidCol.setCellValueFactory(cell -> new javafx.beans.property.SimpleObjectProperty<>(cell.getValue().isPaid()));
-        paidCol.setCellFactory(col -> new TableCell<>() {
-            @Override
-            protected void updateItem(Boolean paid, boolean empty) {
-                super.updateItem(paid, empty);
-                if (empty || paid == null) {
-                    setText(null);
-                    setGraphic(null);
-                } else {
-                    CheckBox checkBox = new CheckBox();
-                    checkBox.setSelected(paid);
-                    checkBox.setDisable(true);
-                    setGraphic(checkBox);
-                }
-            }
-        });
-        paidCol.setPrefWidth(50);
-
-        billsTable.getColumns().addAll(dateCol, descCol, amountCol, paidCol);
     }
 
     private void openBillEditor(Bill existingBill) {
@@ -305,13 +257,37 @@ public class BillsEditorUI {
         TextField amountField = new TextField();
         CheckBox paidCheck = new CheckBox("Paid");
 
+        // Category dropdown
+        ComboBox<ExpenseCategory> categoryCombo = new ComboBox<>();
+        categoryCombo.getItems().addAll(ExpenseCategory.values());
+        categoryCombo.setCellFactory(lv -> new ListCell<ExpenseCategory>() {
+            @Override
+            protected void updateItem(ExpenseCategory item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setStyle("");
+                } else {
+                    setText(item.getDisplayName());
+                    if (item.isDeductible()) {
+                        setStyle("-fx-text-fill: green;");
+                    } else {
+                        setStyle("-fx-text-fill: red;");
+                    }
+                }
+            }
+        });
+        categoryCombo.setButtonCell(categoryCombo.getCellFactory().call(null));
+
         if (existingBill != null) {
             datePicker.setValue(existingBill.getDate());
             descField.setText(existingBill.getDescription());
             amountField.setText(String.format("%.2f", existingBill.getAmount()));
             paidCheck.setSelected(existingBill.isPaid());
+            categoryCombo.setValue(existingBill.getCategory());
         } else {
             datePicker.setValue(LocalDate.now());
+            categoryCombo.setValue(ExpenseCategory.NONE);
         }
 
         GridPane grid = new GridPane();
@@ -325,6 +301,13 @@ public class BillsEditorUI {
         grid.add(new Label("Amount:"), 0, 2);
         grid.add(amountField, 1, 2);
         grid.add(paidCheck, 1, 3);
+        grid.add(new Label("Category:"), 0, 4);
+        grid.add(categoryCombo, 1, 4);
+
+        // Category help text
+        Label helpText = new Label("Green = Deductible, Red = Non-deductible");
+        helpText.setStyle("-fx-font-size: 10; -fx-text-fill: gray;");
+        grid.add(helpText, 1, 5);
 
         dialog.getDialogPane().setContent(grid);
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
@@ -336,19 +319,22 @@ public class BillsEditorUI {
                     double amount = Double.parseDouble(amountField.getText().trim());
                     LocalDate date = datePicker.getValue();
                     boolean paid = paidCheck.isSelected();
+                    ExpenseCategory category = categoryCombo.getValue();
 
                     if (date == null) throw new IllegalArgumentException("Date is required");
                     if (description.isEmpty()) throw new IllegalArgumentException("Description is required");
                     if (amount <= 0) throw new IllegalArgumentException("Amount must be greater than 0");
+                    if (category == null) throw new IllegalArgumentException("Category is required");
 
                     if (existingBill != null) {
                         existingBill.setDate(date);
                         existingBill.setDescription(description);
                         existingBill.setAmount(amount);
                         existingBill.setPaid(paid);
+                        existingBill.setCategory(category);
                         return existingBill;
                     } else {
-                        return new Bill(date, description, amount, paid);
+                        return new Bill(date, description, amount, paid, category);
                     }
                 } catch (Exception e) {
                     showAlert(Alert.AlertType.ERROR, "Invalid Input", e.getMessage());
@@ -380,4 +366,76 @@ public class BillsEditorUI {
         alert.setContentText(content);
         alert.showAndWait();
     }
+    private void setupTableColumns() {
+        TableColumn<Bill, LocalDate> dateCol = new TableColumn<>("Date");
+        dateCol.setCellValueFactory(cell -> new javafx.beans.property.SimpleObjectProperty<>(cell.getValue().getDate()));
+        dateCol.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(LocalDate date, boolean empty) {
+                super.updateItem(date, empty);
+                setText((empty || date == null) ? null : date.format(displayFormatter));
+            }
+        });
+        dateCol.setPrefWidth(100);
+
+        TableColumn<Bill, String> descCol = new TableColumn<>("Description");
+        descCol.setCellValueFactory(cell -> new javafx.beans.property.SimpleStringProperty(cell.getValue().getDescription()));
+        descCol.setPrefWidth(200);
+
+        TableColumn<Bill, Double> amountCol = new TableColumn<>("Amount");
+        amountCol.setCellValueFactory(cell -> new javafx.beans.property.SimpleObjectProperty<>(cell.getValue().getAmount()));
+        amountCol.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(Double amount, boolean empty) {
+                super.updateItem(amount, empty);
+                setText((empty || amount == null) ? null : String.format("$%.2f", amount));
+            }
+        });
+        amountCol.setPrefWidth(100);
+
+        TableColumn<Bill, Boolean> paidCol = new TableColumn<>("Paid");
+        paidCol.setCellValueFactory(cell -> new javafx.beans.property.SimpleObjectProperty<>(cell.getValue().isPaid()));
+        paidCol.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(Boolean paid, boolean empty) {
+                super.updateItem(paid, empty);
+                if (empty || paid == null) {
+                    setText(null);
+                    setGraphic(null);
+                } else {
+                    CheckBox checkBox = new CheckBox();
+                    checkBox.setSelected(paid);
+                    checkBox.setDisable(true);
+                    setGraphic(checkBox);
+                }
+            }
+        });
+        paidCol.setPrefWidth(50);
+
+        // Update category column
+        TableColumn<Bill, ExpenseCategory> categoryCol = new TableColumn<>("Category");
+        categoryCol.setCellValueFactory(cell -> new javafx.beans.property.SimpleObjectProperty<>(cell.getValue().getCategory()));
+        categoryCol.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(ExpenseCategory category, boolean empty) {
+                super.updateItem(category, empty);
+                if (empty || category == null) {
+                    setText(null);
+                    setStyle("");
+                } else {
+                    setText(category.getDisplayName());
+                    // Color code based on deductibility
+                    if (category.isDeductible()) {
+                        setStyle("-fx-text-fill: green;");
+                    } else {
+                        setStyle("-fx-text-fill: red;");
+                    }
+                }
+            }
+        });
+        categoryCol.setPrefWidth(150);
+
+        billsTable.getColumns().addAll(dateCol, descCol, amountCol, paidCol, categoryCol);
+    }
+
 }
