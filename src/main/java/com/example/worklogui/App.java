@@ -34,9 +34,8 @@ public class App extends Application {
             System.out.println("✅ Icon loaded successfully.");
         }
 
-        // ✅ Exit cleanly when window is closed
         primaryStage.setOnCloseRequest(e -> {
-            AutoUpdater.shutdown();   // Just in case, even though stop() also handles it
+            AutoUpdater.shutdown();
             javafx.application.Platform.exit();
             System.exit(0);
         });

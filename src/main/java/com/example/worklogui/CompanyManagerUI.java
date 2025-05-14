@@ -214,10 +214,7 @@ public class CompanyManagerUI {
                 CompanyRateService.getInstance().getRates().keySet()));
     }
 
-    /**
-     * Updates the status area with both status message and warning.
-     * This ensures the warning stays visible even when there are other messages.
-     */
+
     private void updateStatusArea() {
         StringBuilder content = new StringBuilder();
 
@@ -239,27 +236,16 @@ public class CompanyManagerUI {
         statusArea.setText(content.toString());
     }
 
-    /**
-     * Sets a status message and updates the status area
-     * @param message The status message to display
-     */
     private void setStatusMessage(String message) {
         this.statusMessage = message;
         updateStatusArea();
     }
 
-    /**
-     * Sets a warning message and updates the status area
-     * @param warning The warning message to display
-     */
     private void setWarning(String warning) {
         this.currentWarning = warning;
         updateStatusArea();
     }
 
-    /**
-     * Clears the current warning
-     */
     private void clearWarning() {
         this.currentWarning = null;
         updateStatusArea();
@@ -279,7 +265,7 @@ public class CompanyManagerUI {
         String company = companyFilter.getValue();
 
         if (year == null || month == null) {
-            setStatusMessage("⚠️ Please select both year and month to edit bills.\n⚠️ Por favor, selecione ano e mês.");
+            setStatusMessage("⚠ Please select both year and month to edit bills.\n⚠ Por favor, selecione ano e mês.");
             return;
         }
 
@@ -389,7 +375,6 @@ public class CompanyManagerUI {
                 }
             } else {
                 setStatusMessage("✓ Bills updated.\n✓ Contas atualizadas.");
-                // Keep any existing warnings
             }
 
             Platform.runLater(this::scrollToMostRecentBill);
@@ -511,8 +496,6 @@ public class CompanyManagerUI {
                 clearWarning();
             }
         }
-
-
 }
 
 
@@ -599,8 +582,6 @@ public class CompanyManagerUI {
 
     @FXML
     public void onClearFilter() {
-        // Do not modify the filter ComboBoxes — preserve user's selection
-
         // Clear displayed results
         logTable.setItems(FXCollections.observableArrayList());
         setStatusMessage("✔ Display cleared. Filters unchanged.\n✔ Tela limpa. Filtros mantidos.");
@@ -631,7 +612,7 @@ public class CompanyManagerUI {
     public void onEditLogEntry() {
         DisplayEntry selected = logTable.getSelectionModel().getSelectedItem();
         if (selected == null || selected.isBill()) {
-            setStatusMessage("⚠️ No record selected.\n⚠️ Nenhum registro selecionado.");
+            setStatusMessage("⚠ No record selected.\n⚠ Nenhum registro selecionado.");
             return;
         }
         onOpenLogEditor();
@@ -641,7 +622,7 @@ public class CompanyManagerUI {
     public void onDeleteLogEntry() {
         DisplayEntry selected = logTable.getSelectionModel().getSelectedItem();
         if (selected == null || selected.isBill()) {
-            setStatusMessage("⚠️ No record selected.\n⚠️ Nenhum registro selecionado.");
+            setStatusMessage("⚠ No record selected.\n⚠ Nenhum registro selecionado.");
             return;
         }
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,

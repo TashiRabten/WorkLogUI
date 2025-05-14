@@ -95,38 +95,33 @@ public class CompanyManagerService {
         Path path = getBillPath(yearMonth);
         Files.createDirectories(path.getParent());
 
-        System.out.println("🔍 DEBUG: setBillsForMonth() called with yearMonth = " + yearMonth);
-        System.out.println("🔍 DEBUG: Target path = " + path.toAbsolutePath());
-        System.out.println("🔍 DEBUG: Number of bills = " + billList.size());
-
         if (billList.isEmpty()) {
             try {
                 if (Files.exists(path)) {
-                    // Add more detailed debug before deletion
-                    System.out.println("🔍 DEBUG: File exists: " + path.toAbsolutePath());
-                    System.out.println("🔍 DEBUG: File readable: " + Files.isReadable(path));
-                    System.out.println("🔍 DEBUG: File writable: " + Files.isWritable(path));
+                    System.out.println("File exists: " + path.toAbsolutePath());
+                    System.out.println("File readable: " + Files.isReadable(path));
+                    System.out.println("File writable: " + Files.isWritable(path));
 
                     try {
                         Files.delete(path);
                         // Verify deletion immediately
                         boolean stillExists = Files.exists(path);
-                        System.out.println("🔍 DEBUG: After delete call, file exists: " + stillExists);
+                        System.out.println("🔍 After delete call, file exists: " + stillExists);
                         if (stillExists) {
-                            System.out.println("⚠️ WARNING: File still exists after deletion attempt!");
+                            System.out.println("⚠ WARNING: File still exists after deletion attempt!");
                         } else {
-                            System.out.println("🗑 DEBUG: Successfully deleted file " + path.getFileName());
+                            System.out.println("🗑 Successfully deleted file " + path.getFileName());
                         }
                     } catch (Exception e) {
-                        System.out.println("⚠️ DELETION ERROR: " + e.getClass().getName() + ": " + e.getMessage());
+                        System.out.println("⚠ DELETION ERROR: " + e.getClass().getName() + ": " + e.getMessage());
                         throw e; // Re-throw for proper handling
                     }
                 } else {
-                    System.out.println("✅ DEBUG: File already does not exist, no need to delete.");
+                    System.out.println("✅ File already does not exist, no need to delete.");
                 }
                 // Remove from cache when file is deleted
                 this.bills.remove(yearMonth);
-                System.out.println("🔄 DEBUG: Removed " + yearMonth + " from bills cache");
+                System.out.println("🔄 Removed " + yearMonth + " from bills cache");
             } catch (IOException e) {
                 System.out.println("❌ ERROR: Could not delete bill file " + path.getFileName());
                 e.printStackTrace();
@@ -138,7 +133,7 @@ public class CompanyManagerService {
                 if (success) {
                     // Update cache with a defensive copy
                     this.bills.put(yearMonth, new ArrayList<>(billList));
-                    System.out.println("💾 DEBUG: Saved " + billList.size() + " bills to file.");
+                    System.out.println("💾 Saved " + billList.size() + " bills to file.");
                 } else {
                     System.out.println("❌ ERROR: Failed to save bills to file, not updating cache.");
                     throw new IOException("Failed to save bills to " + path.getFileName());
@@ -151,12 +146,12 @@ public class CompanyManagerService {
         }
 
         // Verify file state after operation
-        System.out.println("🔍 DEBUG: Final file state - exists: " + Files.exists(path));
+        System.out.println("Final file state - exists: " + Files.exists(path));
     }
 
     public void clearBillCache() {
         this.bills.clear(); // Clear the cache to force reload from disk
-        System.out.println("🔄 DEBUG: Bill cache cleared");
+        System.out.println("🔄 Bill cache cleared");
     }
 
     public Path getBillPath(String yearMonth) {
@@ -230,7 +225,6 @@ public class CompanyManagerService {
     public Set<String> getMonths() { return months; }
     public Set<String> getCompanies() { return companies; }
 
-    // CRITICAL FIX: Modified to get all bills from disk, ensuring no cached data is used
     public Map<String, List<Bill>> getAllBills() {
         // Always create a fresh map
         Map<String, List<Bill>> all = new HashMap<>();

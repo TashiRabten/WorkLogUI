@@ -17,14 +17,11 @@ public class ExcelExporter {
         // Create directory if it doesn't exist
         Files.createDirectories(AppConstants.EXPORT_FOLDER);
 
-        // Generate filename with timestamp
 
-        // Generate filename with a more descriptive name
-        // Generate filename with a more descriptive name and formatted timestamp
+        // Generate filename with a descriptive name and formatted timestamp
         Files.createDirectories(AppConstants.EXPORT_FOLDER);
 
-        // Generate filename with a more descriptive name and formatted timestamp
-        // Generate filename with a more descriptive name and formatted timestamp
+        // Generate filename with a descriptive name and formatted timestamp
         String filePrefix = isAllExport ? "all_summary_with_bills" : "summary_with_bills";
         String timestamp = DateTimeFormatter.ofPattern("yyyy_MM_dd_HH_mm_ss").format(LocalDateTime.now());
         Path exportPath = AppConstants.EXPORT_FOLDER.resolve(filePrefix + "_" + timestamp + ".xlsx");

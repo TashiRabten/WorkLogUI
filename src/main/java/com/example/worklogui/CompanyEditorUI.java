@@ -64,7 +64,7 @@ public class CompanyEditorUI {
                 if (result.isPresent() && result.get() == ButtonType.OK) {
                     companyRates.remove(selected.getKey());
                     refreshTable();
-                    saveRates(); // ✅ Only save if confirmed
+                    saveRates();
                 }
             } else {
                 Alert warn = new Alert(Alert.AlertType.WARNING,
@@ -76,7 +76,7 @@ public class CompanyEditorUI {
 
         saveBtn.setOnAction(e -> {
             saveRates();
-            refreshTable(); // ✅ Now visibly updates the table
+            refreshTable();
         });
         closeBtn.setOnAction(e -> {
             Stage stage = (Stage) closeBtn.getScene().getWindow();

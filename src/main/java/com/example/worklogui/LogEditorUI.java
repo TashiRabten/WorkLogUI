@@ -9,25 +9,14 @@ import javafx.stage.Stage;
 
 import java.io.IOException;
 
-/**
- * Helper class to create and show the Log Editor window
- */
 public class LogEditorUI {
 
     private Runnable onCloseCallback;
 
-    /**
-     * Set a callback to be executed when the editor is closed
-     * @param callback The callback to execute
-     */
     public void setOnClose(Runnable callback) {
         this.onCloseCallback = callback;
     }
 
-    /**
-     * Shows the Log Editor in a new window
-     * @param owner The owner window
-     */
     public void show(Stage owner) {
         try {
             // Load FXML

@@ -192,7 +192,7 @@ public class AutoUpdater {
                         // Give user a second before shutdown
                         Thread.sleep(1500);
 
-                        // 🔻 Force close
+                        // Force close
                         Platform.exit();
                         System.exit(0);
 
@@ -226,7 +226,7 @@ public class AutoUpdater {
         if (iconStream != null) {
             stage.getIcons().add(new Image(iconStream));
         } else {
-            System.err.println("⚠️ Icon /icons/WorkLog.jpg not found");
+            System.err.println("⚠ Icon /icons/WorkLog.jpg not found");
         }
         stage.show();
     }
@@ -272,7 +272,7 @@ public class AutoUpdater {
 
     private static boolean isNewerVersion(String latest, String current) {
         if (latest == null || latest.isBlank() || current == null || current.isBlank()) {
-            System.err.println("⚠️ Version string is blank. Skipping update check.");
+            System.err.println("⚠ Version string is blank. Skipping update check.");
             return false;
         }
 

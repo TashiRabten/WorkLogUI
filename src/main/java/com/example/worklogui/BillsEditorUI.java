@@ -29,8 +29,6 @@ public class BillsEditorUI {
     private final Set<String> monthsWithRemovedBills = new HashSet<>();
 
 
-    // Add this new constructor to BillsEditorUI
-    // In BillsEditorUI.java, modify the constructor to accept a callback that includes the date:
     public BillsEditorUI(String yearMonthKey, List<Bill> filteredBills, CompanyManagerService service,
                          Stage parentStage, Runnable onClose) {
         this.yearMonth = yearMonthKey;
@@ -46,7 +44,7 @@ public class BillsEditorUI {
         bills.addAll(filteredBills);
     }
 
-    // Add a new constructor that accepts a BiConsumer<String, String> for year and month to filter
+    // New constructor accepts a BiConsumer<String, String> for year and month to filter
     public BillsEditorUI(String yearMonthKey, List<Bill> filteredBills, CompanyManagerService service,
                          Stage parentStage, BiConsumer<String, String> onSaveWithFilter) {
         this.yearMonth = yearMonthKey;
@@ -54,9 +52,7 @@ public class BillsEditorUI {
         this.parentStage = parentStage;
         this.onClose = () -> {};
 
-        // Store the filter callback
         this.onSaveCallback = () -> {
-            // Find the last edited bill month
             String editedYear = null;
             String editedMonth = null;
 
@@ -115,15 +111,11 @@ public class BillsEditorUI {
                             selected.getDate().getYear(),
                             selected.getDate().getMonthValue());
 
-                    // CRITICAL FIX: Remove from our observable list
                     boolean removed = bills.remove(selected);
-                    System.out.println("🔍 DEBUG: Bill removal success: " + removed);
-                    System.out.println("🔍 DEBUG: Updated bills count: " + bills.size());
 
                     if (removed) {
                         // Track that this month had bills removed
                         monthsWithRemovedBills.add(billMonth);
-                        System.out.println("🔍 DEBUG: Tracking removal from month: " + billMonth);
 
                         // Check if this was the last bill for this month
                         boolean monthHasRemainingBills = false;
@@ -136,11 +128,10 @@ public class BillsEditorUI {
                         }
 
                         if (!monthHasRemainingBills) {
-                            System.out.println("🔍 DEBUG: All bills removed from month: " + billMonth);
+                            System.out.println("All bills removed from month: " + billMonth);
                         }
                     }
 
-                    // CRITICAL FIX: Create a completely fresh copy of the list and set it to force UI update
                     ObservableList<Bill> freshList = FXCollections.observableArrayList(new ArrayList<>(bills));
                     billsTable.setItems(freshList);
                     billsTable.refresh();
@@ -153,14 +144,6 @@ public class BillsEditorUI {
         saveBtn.setOnAction(e -> {
             try {
                 service.clearBillCache();
-                System.out.println("🔍 DEBUG: Save button clicked");
-                System.out.println("🔍 DEBUG: Bills to save: " + bills.size());
-
-                // Add direct debug for all bills in memory
-                for (Bill b : bills) {
-                    System.out.println("🔍 DEBUG: Bill in memory: " + b.getDescription() +
-                            " for date " + b.getDate());
-                }
 
                 // Build a map of all months that have bills
                 Map<String, List<Bill>> currentMonths = new HashMap<>();
@@ -171,31 +154,23 @@ public class BillsEditorUI {
 
                 // Process bills by month
                 if (bills.isEmpty() && yearMonth != null && !yearMonth.equals("Multiple")) {
-                    // We're in specific month mode with no bills - clear that month
-                    System.out.println("🔍 DEBUG: Saving empty list for " + yearMonth);
                     service.setBillsForMonth(yearMonth, new ArrayList<>());
                 } else if (yearMonth.equals("Multiple")) {
-                    // We're in "All" mode - handle normally AND check for months that had all bills removed
                     List<Bill> billsCopy = new ArrayList<>(bills);
                     billsCopy.sort(Comparator.comparing(Bill::getDate));
 
                     Map<String, List<Bill>> grouped = new HashMap<>();
                     for (Bill b : billsCopy) {
                         String ym = String.format("%d-%02d", b.getDate().getYear(), b.getDate().getMonthValue());
-                        System.out.println("🔍 DEBUG: Grouping bill to " + ym + ": " + b.getDescription());
                         grouped.computeIfAbsent(ym, k -> new ArrayList<>()).add(b);
                     }
 
                     for (Map.Entry<String, List<Bill>> entry : grouped.entrySet()) {
-                        System.out.println("🔍 DEBUG: Saving " + entry.getValue().size() + " bills to " + entry.getKey());
                         service.setBillsForMonth(entry.getKey(), entry.getValue());
                     }
 
-                    // CRITICAL: Check for months that had all bills removed
                     for (String month : monthsWithRemovedBills) {
                         if (!currentMonths.containsKey(month)) {
-                            // This month had bills removed and now has no bills - save empty list
-                            System.out.println("🔍 DEBUG: Month " + month + " had all bills removed - saving empty list");
                             service.setBillsForMonth(month, new ArrayList<>());
                         }
                     }
@@ -207,30 +182,25 @@ public class BillsEditorUI {
                     Map<String, List<Bill>> grouped = new HashMap<>();
                     for (Bill b : billsCopy) {
                         String ym = String.format("%d-%02d", b.getDate().getYear(), b.getDate().getMonthValue());
-                        System.out.println("🔍 DEBUG: Grouping bill to " + ym + ": " + b.getDescription());
                         grouped.computeIfAbsent(ym, k -> new ArrayList<>()).add(b);
                     }
 
                     for (Map.Entry<String, List<Bill>> entry : grouped.entrySet()) {
-                        System.out.println("🔍 DEBUG: Saving " + entry.getValue().size() + " bills to " + entry.getKey());
                         service.setBillsForMonth(entry.getKey(), entry.getValue());
                     }
 
                     // Ensure current month is saved even if grouping didn't include it
                     if (!grouped.containsKey(yearMonth)) {
-                        System.out.println("🔍 DEBUG: Explicitly saving empty list for " + yearMonth);
                         service.setBillsForMonth(yearMonth, new ArrayList<>());
                     }
                 }
 
                 if (onSaveCallback != null) {
-                    System.out.println("🔍 DEBUG: Running onSaveCallback");
                     onSaveCallback.run();
                 }
 
                 ((Stage) saveBtn.getScene().getWindow()).close();
             } catch (Exception ex) {
-                System.out.println("🔍 DEBUG ERROR: " + ex.getMessage());
                 ex.printStackTrace();
                 showAlert(Alert.AlertType.ERROR, "Save Error", "Could not save bills: " + ex.getMessage());
             }
@@ -308,7 +278,7 @@ public class BillsEditorUI {
     }
 
     private void openBillEditor(Bill existingBill) {
-        System.out.println("🔍 DEBUG: Opening bill editor for " +
+        System.out.println("Opening bill editor for " +
                 (existingBill != null ? "existing bill: " + existingBill.getDescription() : "new bill"));
 
         Dialog<Bill> dialog = new Dialog<>();
@@ -367,29 +337,20 @@ public class BillsEditorUI {
                     LocalDate date = datePicker.getValue();
                     boolean paid = paidCheck.isSelected();
 
-                    System.out.println("🔍 DEBUG: Dialog OK clicked with values:");
-                    System.out.println("🔍 DEBUG: Description: " + description);
-                    System.out.println("🔍 DEBUG: Amount: " + amount);
-                    System.out.println("🔍 DEBUG: Date: " + date);
-                    System.out.println("🔍 DEBUG: Paid: " + paid);
-
                     if (date == null) throw new IllegalArgumentException("Date is required");
                     if (description.isEmpty()) throw new IllegalArgumentException("Description is required");
                     if (amount <= 0) throw new IllegalArgumentException("Amount must be greater than 0");
 
                     if (existingBill != null) {
-                        System.out.println("🔍 DEBUG: Updating existing bill");
                         existingBill.setDate(date);
                         existingBill.setDescription(description);
                         existingBill.setAmount(amount);
                         existingBill.setPaid(paid);
                         return existingBill;
                     } else {
-                        System.out.println("🔍 DEBUG: Creating new bill");
                         return new Bill(date, description, amount, paid);
                     }
                 } catch (Exception e) {
-                    System.out.println("🔍 DEBUG ERROR: " + e.getMessage());
                     showAlert(Alert.AlertType.ERROR, "Invalid Input", e.getMessage());
                 }
             }
@@ -397,13 +358,11 @@ public class BillsEditorUI {
         });
 
         Optional<Bill> result = dialog.showAndWait();
-        System.out.println("🔍 DEBUG: Dialog result present: " + result.isPresent());
         result.ifPresent(bill -> {
             if (existingBill == null) {
-                System.out.println("🔍 DEBUG: Adding new bill to list");
                 bills.add(bill);
             } else {
-                System.out.println("🔍 DEBUG: Existing bill updated in list");
+                System.out.println("Existing bill updated in list");
             }
             bills.sort(Comparator.comparing(Bill::getDate));
 
