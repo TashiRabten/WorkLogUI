@@ -1,7 +1,6 @@
 # WorkLogUI
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/YOUR_CODACY_PROJECT_ID)](https://www.codacy.com/gh/TashiRabten/WorkLogUI/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=TashiRabten/WorkLogUI&amp;utm_campaign=Badge_Grade)
 [![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/TashiRabten/WorkLogUI/releases)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey.svg)](https://github.com/TashiRabten/WorkLogUI)
 [![JavaFX](https://img.shields.io/badge/JavaFX-24.0.1-orange.svg)](https://openjfx.io/)
 
 A JavaFX-based time tracking and billing management application that helps you log work hours, manage company rates, track bills, and generate comprehensive financial reports.
