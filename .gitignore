@@ -15,8 +15,8 @@ target/
 *.json
 *.jpg
 *.ico
+Icons/
 UUID.txt
 worklog.json
 company-rates.json
 WorkLogUI.iml
-*.json
