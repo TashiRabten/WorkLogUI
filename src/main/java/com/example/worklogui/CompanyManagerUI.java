@@ -221,18 +221,18 @@ public class CompanyManagerUI {
     private void updateStatusArea() {
         StringBuilder content = new StringBuilder();
 
-        // Add status message if available
-        if (statusMessage != null && !statusMessage.isEmpty()) {
-            content.append(statusMessage);
+        // Add warning if available (make sure warnings appear at the top)
+        if (currentWarning != null && !currentWarning.isEmpty()) {
+            content.append(currentWarning);
         }
 
-        // Add warning if available
-        if (currentWarning != null && !currentWarning.isEmpty()) {
-            // If we already have a status message, add some spacing
+        // Add status message if available
+        if (statusMessage != null && !statusMessage.isEmpty()) {
+            // If we already have a warning, add some spacing
             if (content.length() > 0) {
                 content.append("\n\n");
             }
-            content.append(currentWarning);
+            content.append(statusMessage);
         }
 
         // Update the status area
@@ -244,15 +244,18 @@ public class CompanyManagerUI {
         updateStatusArea();
     }
 
-    private void setWarning(String warning) {
-        this.currentWarning = warning;
-        updateStatusArea();
-    }
+// And make sure the clearWarning method properly clears warnings:
 
     private void clearWarning() {
         this.currentWarning = null;
         updateStatusArea();
     }
+
+    private void setWarning(String warning) {
+        this.currentWarning = warning;
+        updateStatusArea();
+    }
+
 
     @FXML
     public void handleEditCompanies() {
@@ -474,76 +477,65 @@ public class CompanyManagerUI {
         updateTable(combined);
         logTable.refresh();
 
-        // Calculate AGI using the new calculator
+        // Calculate AGI using the calculator
         AGICalculator.AGIResult agiResult = AGICalculator.calculateAGI(filteredRegistros, filteredBills);
 
-        // Create detailed label
+        // Calculate total bill amount (both deductible and non-deductible)
+        double totalBillAmount = filteredBills.stream()
+                .mapToDouble(Bill::getAmount)
+                .sum();
+
+        // Calculate non-deductible expenses
+        double nonDeductibleExpenses = filteredBills.stream()
+                .filter(bill -> bill.getCategory() == null || !bill.getCategory().isDeductible())
+                .mapToDouble(Bill::getAmount)
+                .sum();
+
+        // Calculate income after all bills (cash flow perspective)
+        double incomeAfterAllBills = agiResult.grossIncome - totalBillAmount;
+
+        // Create Detail Label including non-deductible expenses
         String detailText = String.format(
-                "📈 Gross: $%.2f | 💸 Expenses: $%.2f | 📉 Net: $%.2f | 📊 NESE: $%.2f | 🏛 AGI: $%.2f",
+                "📈 Gross: $%.2f | 💸 Deductible: $%.2f | 🚫 Non-deductible: $%.2f | 💵 After Bills: $%.2f | 📉 Net: $%.2f | 📊 NESE: $%.2f | 💰 AGI: $%.2f",
                 agiResult.grossIncome,
                 agiResult.businessExpenses,
+                nonDeductibleExpenses,
+                incomeAfterAllBills,
                 agiResult.netEarnings,
                 agiResult.nese,
                 agiResult.adjustedGrossIncome
         );
         netTotalLabel.setText(detailText);
 
-        // Use existing WarningUtils for warnings
-        if (!allYears && m != null) {
+        // Set a status message after applying filters
+        if (combined.isEmpty()) {
+            setStatusMessage("ℹ No records match the selected filters.\nℹ Nenhum registro corresponde aos filtros selecionados.");
+        } else {
+            setStatusMessage("✓ Filters applied. Showing " + combined.size() + " records.\n✓ Filtros aplicados. Mostrando " + combined.size() + " registros.");
+        }
+
+        // Handle warnings based on filter selection
+        // FIX: Don't show warnings when "All" is selected for either year or month
+        if (!"All".equals(selectedYear) && !"All".equals(selectedMonth)) {
+            // This is for specific year and month filter
             String filterWarning = WarningUtils.generateFilteredWarning(service.getRegistros(), selectedYear, selectedMonth);
 
-            // Add SGA warning if needed
-            int year = selectedYear != null ? Integer.parseInt(selectedYear) : LocalDate.now().getYear();
-            double monthlyIncome = agiResult.monthlySSACountableIncome;
-            double sgaLimit = AGICalculator.getSGALimit(year);
-
-            if (AGICalculator.exceedsSGALimit(monthlyIncome, year)) {
-                String sgaWarning = String.format(
-                        "⚠️ SGA Warning: Monthly NESE ($%.2f) exceeds SGA limit ($%.2f)\n" +
-                                "⚠️ Aviso SGA: NESE mensal ($%.2f) excede o limite SGA ($%.2f)",
-                        monthlyIncome, sgaLimit, monthlyIncome, sgaLimit
-                );
-
-                if (filterWarning != null) {
-                    setWarning(filterWarning + "\n\n" + sgaWarning);
-                } else {
-                    setWarning(sgaWarning);
-                }
-            } else if (filterWarning != null) {
+            if (filterWarning != null) {
+                // If there's a warning, show it
                 setWarning(filterWarning);
+
+                // Show popup for filtered month if needed
+                Platform.runLater(() -> {
+                    WarningUtils.showFilteredPopupWarningIfNeeded(service.getRegistros(), selectedYear, selectedMonth);
+                });
             } else {
+                // No warning needed, clear any existing warning
                 clearWarning();
             }
-
-            // Show popup for filtered month if needed
-            javafx.application.Platform.runLater(() -> {
-                WarningUtils.showFilteredPopupWarningIfNeeded(service.getRegistros(), selectedYear, selectedMonth);
-            });
         } else {
-            String warning = WarningUtils.generateCurrentMonthWarning(service.getRegistros());
-            if (warning != null) {
-                setWarning(warning);
-            } else {
-                clearWarning();
-            }
+            // This is for "All" selection - do not show warnings
+            clearWarning();
         }
-
-        // Set the status message with category breakdown
-        StringBuilder statusMsg = new StringBuilder();
-        statusMsg.append(String.format("✔ Filter applied. Showing %d entries.\n\n", combined.size()));
-
-        if (!agiResult.expensesByCategory.isEmpty()) {
-            statusMsg.append("Expense Breakdown:\n");
-            agiResult.expensesByCategory.entrySet().stream()
-                    .sorted(Map.Entry.<ExpenseCategory, Double>comparingByValue().reversed())
-                    .forEach(entry -> {
-                        statusMsg.append(String.format("  %s: $%.2f\n",
-                                entry.getKey().getDisplayName(),
-                                entry.getValue()));
-                    });
-        }
-
-        setStatusMessage(statusMsg.toString());
     }
 
     private void updateTable(List<DisplayEntry> entries) {

@@ -51,21 +51,34 @@ public class ExcelExporter {
 
             // Track totals
             double grossTotal = 0.0;
-            double billTotal = 0.0;
-            double deductibleBillTotal = 0.0;
+
+            // Create list of work records and bills for AGI calculation
+            List<RegistroTrabalho> workRecords = new ArrayList<>();
+            List<Bill> bills = new ArrayList<>();
+
+            for (DisplayEntry entry : entries) {
+                if (entry.isBill()) {
+                    bills.add(entry.getBill());
+                } else {
+                    workRecords.add(entry.getRegistro());
+                }
+            }
+
+            // Calculate AGI using the same logic as in the app
+            AGICalculator.AGIResult agiResult = AGICalculator.calculateAGI(workRecords, bills);
 
             // Create workbook and sheet
             try (Workbook workbook = new XSSFWorkbook()) {
                 System.out.println("Creating Excel workbook...");
                 Sheet sheet = workbook.createSheet("WorkLog Export");
 
-                // Set column widths
+                // Set column widths - Increased "Total Hours" column width to fit label text
                 sheet.setColumnWidth(0, 12 * 256); // Type
                 sheet.setColumnWidth(1, 20 * 256); // Category
                 sheet.setColumnWidth(2, 12 * 256); // Date
                 sheet.setColumnWidth(3, 10 * 256); // Hours
                 sheet.setColumnWidth(4, 10 * 256); // Minutes
-                sheet.setColumnWidth(5, 12 * 256); // Total Hours
+                sheet.setColumnWidth(5, 30 * 256); // Total Hours (increased width)
                 sheet.setColumnWidth(6, 15 * 256); // Earnings
                 sheet.setColumnWidth(7, 12 * 256); // Deductible
 
@@ -78,21 +91,21 @@ public class ExcelExporter {
                 headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
                 headerStyle.setBorderBottom(BorderStyle.THIN);
 
-                // Currency style with 3 decimals
+                // Currency style with 2 decimals to match app display
                 CellStyle currencyStyle = workbook.createCellStyle();
                 DataFormat dataFormat = workbook.createDataFormat();
-                currencyStyle.setDataFormat(dataFormat.getFormat("$#,##0.000"));
+                currencyStyle.setDataFormat(dataFormat.getFormat("$#,##0.00"));
 
-                // Negative currency style with 3 decimals
+                // Negative currency style with 2 decimals
                 CellStyle negativeCurrencyStyle = workbook.createCellStyle();
-                negativeCurrencyStyle.setDataFormat(dataFormat.getFormat("$#,##0.000"));
+                negativeCurrencyStyle.setDataFormat(dataFormat.getFormat("$#,##0.00"));
                 Font redFont = workbook.createFont();
                 redFont.setColor(IndexedColors.RED.getIndex());
                 negativeCurrencyStyle.setFont(redFont);
 
-                // Number style with 3 decimals
+                // Number style with 2 decimals to match app display
                 CellStyle numberStyle = workbook.createCellStyle();
-                numberStyle.setDataFormat(dataFormat.getFormat("0.000"));
+                numberStyle.setDataFormat(dataFormat.getFormat("0.00"));
 
                 CellStyle dateStyle = workbook.createCellStyle();
                 dateStyle.setDataFormat(dataFormat.getFormat("mm/dd/yyyy"));
@@ -121,10 +134,6 @@ public class ExcelExporter {
 
                     if (entry.isBill()) {
                         Bill bill = entry.getBill();
-                        billTotal += bill.getAmount();
-                        if (bill.isDeductible()) {
-                            deductibleBillTotal += bill.getAmount();
-                        }
 
                         // Type
                         row.createCell(0).setCellValue("Bill");
@@ -168,7 +177,7 @@ public class ExcelExporter {
                         dateCell.setCellValue(java.sql.Date.valueOf(date));
                         dateCell.setCellStyle(dateStyle);
 
-                        // Hours - with 3 decimal places
+                        // Hours - with 2 decimal places to match app
                         Cell hoursCell = row.createCell(3);
                         hoursCell.setCellValue(r.getHoras());
                         hoursCell.setCellStyle(numberStyle);
@@ -176,12 +185,12 @@ public class ExcelExporter {
                         // Minutes
                         row.createCell(4).setCellValue(r.getMinutos());
 
-                        // Total Hours - with 3 decimal places
+                        // Total Hours - with 2 decimal places to match app
                         Cell totalHoursCell = row.createCell(5);
                         totalHoursCell.setCellValue(totalHours);
                         totalHoursCell.setCellStyle(numberStyle);
 
-                        // Earnings - with 3 decimal places
+                        // Earnings - with 2 decimal places to match app
                         Cell earningsCell = row.createCell(6);
                         earningsCell.setCellValue(earnings);
                         earningsCell.setCellStyle(currencyStyle);
@@ -191,11 +200,7 @@ public class ExcelExporter {
                     }
                 }
 
-                double netTotal = grossTotal - billTotal;
-                double billsDeduction = deductibleBillTotal * 0.09;
-                double agi = grossTotal - billsDeduction;
-
-                // Add summary rows
+                // Add summary rows with data from AGIResult
                 int summaryStartRow = rowNum + 1;
 
                 // Gross Total
@@ -205,69 +210,127 @@ public class ExcelExporter {
                 grossLabelCell.setCellStyle(totalStyle);
 
                 Cell grossValueCell = grossRow.createCell(6);
-                grossValueCell.setCellValue(grossTotal);
+                grossValueCell.setCellValue(agiResult.grossIncome);
                 grossValueCell.setCellStyle(currencyStyle);
 
-                // Bill Total
+                // Business Expenses Total
                 Row billRow = sheet.createRow(summaryStartRow + 1);
                 Cell billLabelCell = billRow.createCell(5);
-                billLabelCell.setCellValue("TOTAL BILLS");
+                billLabelCell.setCellValue("BUSINESS EXPENSES");
                 billLabelCell.setCellStyle(totalStyle);
 
                 Cell billValueCell = billRow.createCell(6);
-                billValueCell.setCellValue(-billTotal);
+                billValueCell.setCellValue(-agiResult.businessExpenses);
                 billValueCell.setCellStyle(negativeCurrencyStyle);
 
-                // Net Total
+                // Net Earnings
                 Row netRow = sheet.createRow(summaryStartRow + 2);
                 Cell netLabelCell = netRow.createCell(5);
-                netLabelCell.setCellValue("NET TOTAL");
+                netLabelCell.setCellValue("NET EARNINGS");
                 netLabelCell.setCellStyle(totalStyle);
 
                 Cell netValueCell = netRow.createCell(6);
-                netValueCell.setCellValue(netTotal);
+                netValueCell.setCellValue(agiResult.netEarnings);
 
                 CellStyle netTotalStyle = workbook.createCellStyle();
-                netTotalStyle.setDataFormat(dataFormat.getFormat("$#,##0.000"));
+                netTotalStyle.setDataFormat(dataFormat.getFormat("$#,##0.00"));
                 netTotalStyle.setFont(totalFont);
                 netTotalStyle.setBorderTop(BorderStyle.DOUBLE);
                 netValueCell.setCellStyle(netTotalStyle);
 
-                // Deductible Bills Total
-                Row deductibleRow = sheet.createRow(summaryStartRow + 3);
-                Cell deductibleLabelCell = deductibleRow.createCell(5);
-                deductibleLabelCell.setCellValue("DEDUCTIBLE BILLS");
-                deductibleLabelCell.setCellStyle(totalStyle);
+                // Add NESE (Net Earnings from Self-Employment)
+                Row neseRow = sheet.createRow(summaryStartRow + 3);
+                Cell neseLabelCell = neseRow.createCell(5);
+                neseLabelCell.setCellValue("NESE (NET × 0.9235)");
+                neseLabelCell.setCellStyle(totalStyle);
 
-                Cell deductibleValueCell = deductibleRow.createCell(6);
-                deductibleValueCell.setCellValue(deductibleBillTotal);
-                deductibleValueCell.setCellStyle(currencyStyle);
+                Cell neseValueCell = neseRow.createCell(6);
+                neseValueCell.setCellValue(agiResult.nese);
+                neseValueCell.setCellStyle(currencyStyle);
 
-                // Bills Deduction (9%)
-                Row deductionRow = sheet.createRow(summaryStartRow + 4);
-                Cell deductionLabelCell = deductionRow.createCell(5);
-                deductionLabelCell.setCellValue("SSA DEDUCTION (9%)");
-                deductionLabelCell.setCellStyle(totalStyle);
+                // SE Tax
+                Row seTaxRow = sheet.createRow(summaryStartRow + 4);
+                Cell seTaxLabelCell = seTaxRow.createCell(5);
+                seTaxLabelCell.setCellValue("SE TAX (15.3%)");
+                seTaxLabelCell.setCellStyle(totalStyle);
 
-                Cell deductionValueCell = deductionRow.createCell(6);
-                deductionValueCell.setCellValue(billsDeduction);
-                deductionValueCell.setCellStyle(currencyStyle);
+                Cell seTaxValueCell = seTaxRow.createCell(6);
+                seTaxValueCell.setCellValue(agiResult.selfEmploymentTax);
+                seTaxValueCell.setCellStyle(currencyStyle);
+
+                // SE Tax Deduction
+                Row seTaxDeductionRow = sheet.createRow(summaryStartRow + 5);
+                Cell seTaxDeductionLabelCell = seTaxDeductionRow.createCell(5);
+                seTaxDeductionLabelCell.setCellValue("SE TAX DEDUCTION (50%)");
+                seTaxDeductionLabelCell.setCellStyle(totalStyle);
+
+                Cell seTaxDeductionValueCell = seTaxDeductionRow.createCell(6);
+                seTaxDeductionValueCell.setCellValue(agiResult.selfEmploymentTaxDeduction);
+                seTaxDeductionValueCell.setCellStyle(currencyStyle);
 
                 // AGI
-                Row agiRow = sheet.createRow(summaryStartRow + 5);
+                Row agiRow = sheet.createRow(summaryStartRow + 6);
                 Cell agiLabelCell = agiRow.createCell(5);
                 agiLabelCell.setCellValue("ADJUSTED GROSS INCOME");
                 agiLabelCell.setCellStyle(totalStyle);
 
                 Cell agiValueCell = agiRow.createCell(6);
-                agiValueCell.setCellValue(agi);
+                agiValueCell.setCellValue(agiResult.adjustedGrossIncome);
 
                 CellStyle agiStyle = workbook.createCellStyle();
-                agiStyle.setDataFormat(dataFormat.getFormat("$#,##0.000"));
+                agiStyle.setDataFormat(dataFormat.getFormat("$#,##0.00"));
                 agiStyle.setFont(totalFont);
                 agiStyle.setBorderTop(BorderStyle.DOUBLE);
                 agiStyle.setBorderBottom(BorderStyle.DOUBLE);
                 agiValueCell.setCellStyle(agiStyle);
+
+                // Add monthly SSA countable income (for SGA purposes)
+                Row monthlySsaRow = sheet.createRow(summaryStartRow + 7);
+                Cell monthlySsaLabelCell = monthlySsaRow.createCell(5);
+                monthlySsaLabelCell.setCellValue("MONTHLY SSA COUNTABLE");
+                monthlySsaLabelCell.setCellStyle(totalStyle);
+
+                Cell monthlySsaValueCell = monthlySsaRow.createCell(6);
+                monthlySsaValueCell.setCellValue(agiResult.monthlySSACountableIncome);
+                monthlySsaValueCell.setCellStyle(currencyStyle);
+
+                // Add Non-Deductible Expenses row
+                Row nonDeductibleRow = sheet.createRow(summaryStartRow + 8);
+                Cell nonDeductibleLabelCell = nonDeductibleRow.createCell(5);
+                nonDeductibleLabelCell.setCellValue("NON-DEDUCTIBLE EXPENSES");
+                nonDeductibleLabelCell.setCellStyle(totalStyle);
+
+                // Calculate non-deductible expenses
+                double nonDeductibleExpenses = bills.stream()
+                        .filter(bill -> !bill.isDeductible())
+                        .mapToDouble(Bill::getAmount)
+                        .sum();
+
+                Cell nonDeductibleValueCell = nonDeductibleRow.createCell(6);
+                nonDeductibleValueCell.setCellValue(-nonDeductibleExpenses);
+                nonDeductibleValueCell.setCellStyle(negativeCurrencyStyle);
+
+                // Add Cash Flow (Income after all bills) row
+                Row cashFlowRow = sheet.createRow(summaryStartRow + 9);
+                Cell cashFlowLabelCell = cashFlowRow.createCell(5);
+                cashFlowLabelCell.setCellValue("AFTER ALL BILLS");
+                cashFlowLabelCell.setCellStyle(totalStyle);
+
+                // Calculate cash flow
+                double totalBillAmount = bills.stream()
+                        .mapToDouble(Bill::getAmount)
+                        .sum();
+                double incomeAfterAllBills = agiResult.grossIncome - totalBillAmount;
+
+                Cell cashFlowValueCell = cashFlowRow.createCell(6);
+                cashFlowValueCell.setCellValue(incomeAfterAllBills);
+
+                CellStyle cashFlowStyle = workbook.createCellStyle();
+                cashFlowStyle.setDataFormat(dataFormat.getFormat("$#,##0.00"));
+                cashFlowStyle.setFont(totalFont);
+                cashFlowStyle.setBorderTop(BorderStyle.DOUBLE);
+                cashFlowStyle.setBorderBottom(BorderStyle.DOUBLE);
+                cashFlowValueCell.setCellStyle(cashFlowStyle);
 
                 // Write the workbook to a file
                 System.out.println("Writing Excel file to disk...");
