@@ -13,6 +13,9 @@ target/
 *.exe
 *.log
 *.json
+*.jpg
+*.ico
+UUID.txt
 worklog.json
 company-rates.json
 WorkLogUI.iml

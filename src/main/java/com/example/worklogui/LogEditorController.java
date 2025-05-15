@@ -1,5 +1,6 @@
     package com.example.worklogui;
 
+            import javafx.css.converter.StringConverter;
             import javafx.fxml.FXML;
             import javafx.scene.control.*;
             import javafx.stage.Stage;
@@ -8,6 +9,8 @@
             import javafx.scene.layout.GridPane;
             import javafx.scene.layout.VBox;
 
+            import javafx.scene.control.DatePicker;
+            import javafx.application.Platform;
             import java.time.LocalDate;
             import java.time.format.DateTimeFormatter;
             import java.time.format.DateTimeParseException;
@@ -238,9 +241,38 @@ public class LogEditorController {
         grid.setVgap(10);
         grid.setPadding(new Insets(20, 150, 10, 10));
 
-        // Date field
-        TextField dateTextField = new TextField(entry.getData());
-        dateTextField.setPromptText("DD/MM/YYYY");
+        // Date picker instead of text field
+        DatePicker datePicker = new DatePicker();
+        datePicker.setConverter(new javafx.util.StringConverter<LocalDate>() {
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+
+            @Override
+            public String toString(LocalDate date) {
+                if (date != null) {
+                    return formatter.format(date);
+                } else {
+                    return "";
+                }
+            }
+
+            @Override
+            public LocalDate fromString(String string) {
+                if (string != null && !string.isEmpty()) {
+                    return LocalDate.parse(string, formatter);
+                } else {
+                    return null;
+                }
+            }
+        });
+
+        // Set the current date value
+        try {
+            LocalDate currentDate = LocalDate.parse(entry.getData(), DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+            datePicker.setValue(currentDate);
+        } catch (Exception e) {
+            // If parsing fails, set to today
+            datePicker.setValue(LocalDate.now());
+        }
 
         // Company dropdown
         ComboBox<String> companyCombo = new ComboBox<>();
@@ -259,7 +291,7 @@ public class LogEditorController {
 
         // Add fields to grid
         grid.add(new Label("Date:"), 0, 0);
-        grid.add(dateTextField, 1, 0);
+        grid.add(datePicker, 1, 0);
         grid.add(new Label("Company:"), 0, 1);
         grid.add(companyCombo, 1, 1);
         grid.add(new Label("Hours:"), 0, 2);
@@ -270,24 +302,23 @@ public class LogEditorController {
 
         dialog.getDialogPane().setContent(grid);
 
-        // Request focus on the date field by default
-        dateTextField.requestFocus();
+        // Request focus on the date picker by default
+        Platform.runLater(() -> datePicker.requestFocus());
 
         // Convert the result to a RegistroTrabalho object when the save button is clicked
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == saveButtonType) {
                 try {
-                    // Validate date
-                    String date = dateTextField.getText().trim();
-                    LocalDate parsedDate;
-                    try {
-                        parsedDate = DateParser.parseDate(date);
-                        date = parsedDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
-                    } catch (DateTimeParseException e) {
+                    // Get date from DatePicker
+                    LocalDate selectedDate = datePicker.getValue();
+                    if (selectedDate == null) {
                         showAlert(Alert.AlertType.ERROR, "Invalid Date",
-                                "Please enter a valid date in MM/DD/YYYY format.");
+                                "Please select a valid date.");
                         return null;
                     }
+
+                    // Format date to MM/dd/yyyy
+                    String date = selectedDate.format(DateTimeFormatter.ofPattern("MM/dd/yyyy"));
 
                     // Validate hours
                     double hours;

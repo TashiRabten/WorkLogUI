@@ -179,8 +179,9 @@ public class AutoUpdater {
                         Files.copy(in, tempOutput, StandardCopyOption.REPLACE_EXISTING);
                     }
 
-                    Path userDownloads = AppConstants.EXPORT_FOLDER.resolve(fileName);
-                    Files.createDirectories(AppConstants.EXPORT_FOLDER);
+                    Path installerFolder = AppConstants.EXPORT_FOLDER.getParent().resolve("installer");
+                    Files.createDirectories(installerFolder);
+                    Path userDownloads = installerFolder.resolve(fileName);                    Files.createDirectories(AppConstants.EXPORT_FOLDER);
                     Files.copy(tempOutput, userDownloads, StandardCopyOption.REPLACE_EXISTING);
                     Files.deleteIfExists(tempOutput);
 
