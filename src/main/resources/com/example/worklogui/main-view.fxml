@@ -17,7 +17,7 @@
                         <Insets top="5" right="10" bottom="5" left="10"/>
                     </padding>
                     <Label text="Date:"/>
-                    <TextField fx:id="dateField" promptText="MM/DD/YYYY"/>
+                    <DatePicker fx:id="dateField" promptText="MM/DD/YYYY"/>
                     <Label text="Company:"/>
                     <ComboBox fx:id="jobTypeCombo" prefWidth="150"/>
                     <Button fx:id="editCompaniesBtn" text="✎ Edit Companies" onAction="#handleEditCompanies"/>
@@ -49,7 +49,6 @@
             <Button text="📊 Monthly/Yearly Summary" onAction="#onShowSummaryByMonthAndYear"/>
             <Button text="📤 Export Excel" onAction="#onExportExcel"/>
             <Button fx:id="openLogEditorBtn" text="📋 View/Edit Logs" onAction="#onOpenLogEditor" />
-            <Button text="💸 Edit Bills" fx:id="editBillsBtn" onAction="#onEditBills"/>
         </HBox>
 
         <!-- TableView for logs -->
