@@ -6,6 +6,9 @@ import javafx.scene.control.*;
 import javafx.stage.Stage;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Main UI controller for the WorkLog application.
@@ -103,45 +106,82 @@ public class CompanyManagerUI {
         logTableController.setupControls(logTable, dateCol, companyCol, hoursCol, minutesCol, doublePayCol, earningsCol, netTotalLabel);
         logTableController.setStatusMessageHandler(statusManager::setStatusMessage);
 
-        // Set up bills manager
-        billsManager.setStatusMessageHandler(statusManager::setStatusMessage);
-        billsManager.setWarningMessageHandler(warningManager::setWarning);
-        billsManager.setOnBillsUpdatedCallback(this::refreshAfterBillsUpdated);
 
         // Set up export manager
         exportManager.setStatusMessageHandler(statusManager::setStatusMessage);
         exportManager.setCurrentEntriesSupplier(logTableController::getCurrentDisplayEntries);
+
+        // In the initializeControllers method
+        billsManager.setStatusMessageHandler(statusManager::setStatusMessage);
+        billsManager.setWarningMessageHandler(warningManager::setWarning);
+        billsManager.setOnBillsUpdatedCallback(this::refreshAfterBillsUpdated);
+        billsManager.setFilterSetterCallback((year, month) -> {
+            filterController.setFilterValues(year, month, null);
+            onApplyFilter();
+        });
+
     }
 
-    /**
-     * Refresh UI after work is logged
-     */
     private void refreshAfterWorkLogged() {
-        // Refresh the year/month map from scratch
-        filterController.refreshYearToMonthsMap();
+        // Get the date of the log entry that was just added
+        LocalDate entryDate = workLogEntryController.getLastAddedEntryDate();
+        String company = workLogEntryController.getLastAddedCompany();
 
-        // Get the new year and month values for UI update
-        LocalDate now = LocalDate.now();
-        String newYear = String.valueOf(now.getYear());
-        String newMonth = String.format("%02d", now.getMonthValue());
+        if (entryDate != null) {
+            // Refresh the year/month map
+            filterController.refreshYearToMonthsMap();
 
-        // Update filter dropdowns
-        filterController.updateYearFilterItems();
-        filterController.setFilterValues(newYear, newMonth, jobTypeCombo.getValue());
+            // Update filter dropdowns and set to match entry date
+            filterController.updateYearFilterItems();
+            filterController.setFilterValues(
+                    String.valueOf(entryDate.getYear()),
+                    String.format("%02d", entryDate.getMonthValue()),
+                    company
+            );
 
-        // Apply the new filter
-        onApplyFilter();
+            // Apply the filter
+            onApplyFilter();
+        } else {
+            // Fallback to old behavior if no date available
+            filterController.refreshYearToMonthsMap();
+            filterController.updateYearFilterItems();
+            filterController.updateMonthFilter();
+            onApplyFilter();
+        }
+    }
+    private void refreshAfterBillsUpdated() {
+        try {
+            service.clearBillCache();
+            filterController.refreshYearToMonthsMap();
+            filterController.updateYearFilterItems();
+
+            // Use the specific edited year/month if available
+            String yearToUse = billsManager.getLastEditedYear();
+            String monthToUse = billsManager.getLastEditedMonth();
+
+            if (yearToUse != null && monthToUse != null) {
+                System.out.println("Setting filters to edited bill date: " + yearToUse + "-" + monthToUse);
+                filterController.setFilterValues(yearToUse, monthToUse, null);
+            } else {
+                filterController.updateMonthFilter();
+            }
+
+            onApplyFilter();
+            Platform.runLater(logTableController::scrollToMostRecentBill);
+        } catch (Exception e) {
+            System.err.println("Error refreshing after bills update: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     /**
-     * Refresh UI after bills are updated
+     * Set filters to specific year and month
      */
-    private void refreshAfterBillsUpdated() {
+    public void setFiltersToDate(String year, String month, String company) {
         filterController.refreshYearToMonthsMap();
         filterController.updateYearFilterItems();
-        filterController.updateMonthFilter();
+        filterController.setFilterValues(year, month, company);
         onApplyFilter();
-        Platform.runLater(logTableController::scrollToMostRecentBill);
     }
 
     /**
@@ -264,24 +304,47 @@ public class CompanyManagerUI {
         exportManager.exportToExcel();
     }
 
-    /**
-     * Handle open log editor button click
-     */
     @FXML
     public void onOpenLogEditor() {
         LogEditorUI editor = new LogEditorUI();
         editor.setOnClose(() -> {
             try {
                 service.reloadRegistros();
-                filterController.refreshYearToMonthsMap();
 
-                // Update filter dropdowns
-                filterController.updateYearFilterItems();
-                filterController.updateMonthFilter();
+                // Find most recently edited log
+                List<RegistroTrabalho> logs = service.getRegistros();
+                if (!logs.isEmpty()) {
+                    logs.sort((a, b) -> {
+                        try {
+                            LocalDate dateA = LocalDate.parse(a.getData(), DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+                            LocalDate dateB = LocalDate.parse(b.getData(), DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+                            return dateB.compareTo(dateA); // Recent first
+                        } catch (Exception e) {
+                            return 0;
+                        }
+                    });
+
+                    RegistroTrabalho latest = logs.get(0);
+                    LocalDate editedDate = LocalDate.parse(latest.getData(), DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+
+                    // Set filters directly instead of using updateMonthFilter which resets to All
+                    filterController.refreshYearToMonthsMap();
+                    filterController.updateYearFilterItems();
+
+                    // Critical - set values directly
+                    String year = String.valueOf(editedDate.getYear());
+                    String month = String.format("%02d", editedDate.getMonthValue());
+                    System.out.println("Setting log filters to: " + year + "-" + month);
+                    filterController.setFilterValues(year, month, latest.getEmpresa());
+                } else {
+                    filterController.refreshYearToMonthsMap();
+                    filterController.updateYearFilterItems();
+                }
+
+                onApplyFilter();
             } catch (Exception e) {
                 e.printStackTrace();
             }
-            onApplyFilter();
         });
         editor.show((Stage) openLogEditorBtn.getScene().getWindow());
     }

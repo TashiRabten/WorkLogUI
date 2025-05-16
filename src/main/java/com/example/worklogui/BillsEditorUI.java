@@ -66,9 +66,10 @@ public class BillsEditorUI {
                 editedYear = String.valueOf(lastEditedBill.getDate().getYear());
                 editedMonth = String.format("%02d", lastEditedBill.getDate().getMonthValue());
             }
-
-            // Call the callback with the year and month to filter
+// After editing a bill, log what values are being passed back
+            System.out.println("DEBUG: Bill edited - passing year: " + editedYear + ", month: " + editedMonth);
             onSaveWithFilter.accept(editedYear, editedMonth);
+            // Call the callback with the year and month to filter
         };
 
         // Add all the filtered bills to our observable list

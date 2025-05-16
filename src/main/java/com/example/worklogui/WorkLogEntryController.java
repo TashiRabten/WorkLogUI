@@ -115,14 +115,15 @@ public class WorkLogEntryController {
             double valor = Double.parseDouble(rawValue);
 
             // Log the work
+            // In the onLogWork method, after logging work:
             RegistroTrabalho newEntry = service.logWork(parsedDate, empresa, valor, dobro);
+            lastAddedEntryDate = parsedDate;
+            lastAddedCompany = empresa;
 
-            // Clear inputs
             dateField.setValue(LocalDate.now()); // Reset to today's date
             valueField.clear();
             doublePayCheckBox.setSelected(false);
 
-            // Check for warnings
             String warning = WarningUtils.generateCurrentMonthWarning(service.getRegistros());
             if (warning != null) {
                 setStatusMessage("✔ Work logged successfully.\n✔ Entrada registrada com sucesso.");
@@ -134,7 +135,6 @@ public class WorkLogEntryController {
                 setStatusMessage("✔ Work logged successfully.\n✔ Entrada registrada com sucesso.");
             }
 
-            // Notify main controller
             if (onWorkLoggedCallback != null) {
                 onWorkLoggedCallback.run();
             }
@@ -145,6 +145,7 @@ public class WorkLogEntryController {
             e.printStackTrace();
         }
     }
+
 
     private void setStatusMessage(String message) {
         if (statusMessageHandler != null) {
@@ -157,4 +158,18 @@ public class WorkLogEntryController {
             warningMessageHandler.accept(warning);
         }
     }
+    // Add a field to store the latest entry date
+    private LocalDate lastAddedEntryDate;
+    private String lastAddedCompany;
+
+
+    // Add a method to get this date
+    public LocalDate getLastAddedEntryDate() {
+        return lastAddedEntryDate;
+    }
+
+    public String getLastAddedCompany() {
+        return lastAddedCompany;
+    }
+
 }

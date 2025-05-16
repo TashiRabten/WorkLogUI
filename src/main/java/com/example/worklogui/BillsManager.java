@@ -22,6 +22,11 @@ public class BillsManager {
     private Consumer<String> statusMessageHandler;
     private Consumer<String> warningMessageHandler;
     private Runnable onBillsUpdatedCallback;
+    private BiConsumer<String, String> filterSetterCallback;
+    private String lastEditedYear;
+    private String lastEditedMonth;
+
+
 
     public BillsManager(CompanyManagerService service) {
         this.service = service;
@@ -47,6 +52,9 @@ public class BillsManager {
     public void setOnBillsUpdatedCallback(Runnable callback) {
         this.onBillsUpdatedCallback = callback;
     }
+
+    public String getLastEditedYear() { return lastEditedYear; }
+    public String getLastEditedMonth() { return lastEditedMonth; }
 
     /**
      * Edit bills for the specified filters
@@ -144,31 +152,23 @@ public class BillsManager {
                 parentStage, this::filterToEditedBill).show();
     }
 
-    /**
-     * Handle callback when bills are edited, to filter to the edited bill's date
-     */
+    // Add this method
+    public void setFilterSetterCallback(BiConsumer<String, String> callback) {
+        this.filterSetterCallback = callback;
+    }
+
     private void filterToEditedBill(String editedYear, String editedMonth) {
         try {
             service.clearBillCache();
 
             // If we have a valid year and month from the edited bill, notify callback
             if (editedYear != null && editedMonth != null) {
-                // Ensure all bills have valid categories before saving
                 validateBillCategories(editedYear, editedMonth);
-
                 setStatusMessage("✓ Bills updated.\n✓ Contas atualizadas.");
 
-                // Check if this is the current month for warnings
-                LocalDate now = LocalDate.now();
-                String currentYear = String.valueOf(now.getYear());
-                String currentMonth = String.format("%02d", now.getMonthValue());
-
-                if ((editedYear.equals(currentYear)) && (editedMonth.equals(currentMonth))) {
-                    String warning = WarningUtils.generateCurrentMonthWarning(service.getRegistros());
-                    if (warning != null) {
-                        setWarningMessage(WarningUtils.appendTimestampedWarning(warning));
-                    }
-                }
+                // IMPORTANT: Store the edited year/month so refreshAfterBillsUpdated can use it
+                lastEditedYear = editedYear;
+                lastEditedMonth = editedMonth;
             } else {
                 setStatusMessage("✓ Bills updated.\n✓ Contas atualizadas.");
             }
@@ -177,13 +177,12 @@ public class BillsManager {
             if (onBillsUpdatedCallback != null) {
                 onBillsUpdatedCallback.run();
             }
-
-            // Scroll to most recent bill (will be done by main controller)
         } catch (Exception ex) {
             setStatusMessage("❌ Error updating bills: " + ex.getMessage());
             ex.printStackTrace();
         }
     }
+
 
     /**
      * Validate and fix any bills with missing categories
