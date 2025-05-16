@@ -105,7 +105,7 @@ public class CompanyManagerUI {
         // Set up log table controller
         logTableController.setupControls(logTable, dateCol, companyCol, hoursCol, minutesCol, doublePayCol, earningsCol, netTotalLabel);
         logTableController.setStatusMessageHandler(statusManager::setStatusMessage);
-
+        logTableController.setFilterController(filterController);
 
         // Set up export manager
         exportManager.setStatusMessageHandler(statusManager::setStatusMessage);
@@ -136,7 +136,7 @@ public class CompanyManagerUI {
             filterController.setFilterValues(
                     String.valueOf(entryDate.getYear()),
                     String.format("%02d", entryDate.getMonthValue()),
-                    company
+                    "All"
             );
 
             // Apply the filter
@@ -307,10 +307,29 @@ public class CompanyManagerUI {
     @FXML
     public void onOpenLogEditor() {
         LogEditorUI editor = new LogEditorUI();
+
+        // Create a filter callback that first reloads the data, then sets the filter
+        editor.setOnFilterCallback((year, month) -> {
+            try {
+                // First reload the logs data
+                service.reloadRegistros();
+
+                // Then set filter values
+                filterController.setFilterValues(year, month, "All");
+
+                // Apply filter
+                onApplyFilter();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+
+        // The regular close callback (for when filter callback isn't triggered)
         editor.setOnClose(() -> {
             try {
                 service.reloadRegistros();
 
+                // Only update filters if no specific filter callback was triggered
                 // Find most recently edited log
                 List<RegistroTrabalho> logs = service.getRegistros();
                 if (!logs.isEmpty()) {
@@ -323,29 +342,30 @@ public class CompanyManagerUI {
                             return 0;
                         }
                     });
-
                     RegistroTrabalho latest = logs.get(0);
                     LocalDate editedDate = LocalDate.parse(latest.getData(), DateTimeFormatter.ofPattern("MM/dd/yyyy"));
-
                     // Set filters directly instead of using updateMonthFilter which resets to All
                     filterController.refreshYearToMonthsMap();
                     filterController.updateYearFilterItems();
-
                     // Critical - set values directly
                     String year = String.valueOf(editedDate.getYear());
                     String month = String.format("%02d", editedDate.getMonthValue());
                     System.out.println("Setting log filters to: " + year + "-" + month);
-                    filterController.setFilterValues(year, month, latest.getEmpresa());
+                    filterController.setFilterValues(year, month, "All");
                 } else {
                     filterController.refreshYearToMonthsMap();
                     filterController.updateYearFilterItems();
                 }
-
                 onApplyFilter();
             } catch (Exception e) {
                 e.printStackTrace();
             }
         });
-        editor.show((Stage) openLogEditorBtn.getScene().getWindow());
-    }
-}
+
+        // Get current filters and pass to show method
+        String year = filterController.getSelectedYear();
+        String month = filterController.getSelectedMonth();
+        String company = filterController.getSelectedCompany();
+
+        editor.show((Stage) openLogEditorBtn.getScene().getWindow(), year, month, company);
+    }}

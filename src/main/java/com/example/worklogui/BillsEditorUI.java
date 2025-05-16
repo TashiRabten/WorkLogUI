@@ -28,7 +28,8 @@ public class BillsEditorUI {
     private final DateTimeFormatter displayFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
     private final Runnable onSaveCallback;
     private final Set<String> monthsWithRemovedBills = new HashSet<>();
-
+    private Bill mostRecentlyAddedBill = null;
+    private boolean billsEdited = false;
 
     public BillsEditorUI(String yearMonthKey, List<Bill> filteredBills, CompanyManagerService service,
                          Stage parentStage, Runnable onClose) {
@@ -54,22 +55,41 @@ public class BillsEditorUI {
         this.onClose = () -> {};
 
         this.onSaveCallback = () -> {
-            String editedYear = null;
-            String editedMonth = null;
+            // Only update filters if additions or edits occurred (not just removals)
+            if (billsEdited || mostRecentlyAddedBill != null) {
+                String editedYear = null;
+                String editedMonth = null;
 
-            if (!bills.isEmpty()) {
-                // Sort by date to get the most recently edited bill
-                List<Bill> sortedBills = new ArrayList<>(bills);
-                sortedBills.sort(Comparator.comparing(Bill::getDate).reversed());
-                Bill lastEditedBill = sortedBills.get(0);
+                // If we have a recently added bill, use its date
+                if (mostRecentlyAddedBill != null) {
+                    editedYear = String.valueOf(mostRecentlyAddedBill.getDate().getYear());
+                    editedMonth = String.format("%02d", mostRecentlyAddedBill.getDate().getMonthValue());
+                }
+                // Otherwise, fall back to the most recent bill by date if edits occurred
+                else if (billsEdited && !bills.isEmpty()) {
+                    List<Bill> sortedBills = new ArrayList<>(bills);
+                    sortedBills.sort(Comparator.comparing(Bill::getDate).reversed());
+                    Bill lastEditedBill = sortedBills.get(0);
 
-                editedYear = String.valueOf(lastEditedBill.getDate().getYear());
-                editedMonth = String.format("%02d", lastEditedBill.getDate().getMonthValue());
+                    editedYear = String.valueOf(lastEditedBill.getDate().getYear());
+                    editedMonth = String.format("%02d", lastEditedBill.getDate().getMonthValue());
+                }
+
+                if (editedYear != null && editedMonth != null) {
+                    System.out.println("DEBUG: Bill edited - passing year: " + editedYear + ", month: " + editedMonth);
+                    onSaveWithFilter.accept(editedYear, editedMonth);
+                } else {
+                    // No filter update needed, just call without filters
+                    onSaveWithFilter.accept(null, null);
+                }
+            } else {
+                // No additions or edits occurred, just call without filters
+                onSaveWithFilter.accept(null, null);
             }
-// After editing a bill, log what values are being passed back
-            System.out.println("DEBUG: Bill edited - passing year: " + editedYear + ", month: " + editedMonth);
-            onSaveWithFilter.accept(editedYear, editedMonth);
-            // Call the callback with the year and month to filter
+
+            // Reset tracking variables
+            mostRecentlyAddedBill = null;
+            billsEdited = false;
         };
 
         // Add all the filtered bills to our observable list
@@ -229,7 +249,6 @@ public class BillsEditorUI {
         }
         stage.show();
     }
-
     private void openBillEditor(Bill existingBill) {
         System.out.println("Opening bill editor for " +
                 (existingBill != null ? "existing bill: " + existingBill.getDescription() : "new bill"));
@@ -348,8 +367,11 @@ public class BillsEditorUI {
         result.ifPresent(bill -> {
             if (existingBill == null) {
                 bills.add(bill);
+                mostRecentlyAddedBill = bill;  // Track the most recently added bill
+                billsEdited = true;            // Mark that an addition occurred
             } else {
                 System.out.println("Existing bill updated in list");
+                billsEdited = true;            // Mark that an edit occurred
             }
             bills.sort(Comparator.comparing(Bill::getDate));
 

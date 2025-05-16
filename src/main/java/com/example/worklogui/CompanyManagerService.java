@@ -151,6 +151,10 @@ public class CompanyManagerService {
     public void deleteRegistro(RegistroTrabalho registro) throws Exception {
         registros.remove(registro);
         FileLoader.salvarRegistros(WORKLOG_PATH, registros);
+
+        // Reload data to ensure consistency
+        registros = FileLoader.carregarRegistros(WORKLOG_PATH);
+
         populateFilters();
     }
 

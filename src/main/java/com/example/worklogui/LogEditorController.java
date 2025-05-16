@@ -1,24 +1,28 @@
-    package com.example.worklogui;
+package com.example.worklogui;
 
-            import javafx.css.converter.StringConverter;
-            import javafx.fxml.FXML;
-            import javafx.scene.control.*;
-            import javafx.stage.Stage;
-            import javafx.beans.property.SimpleStringProperty;
-            import javafx.geometry.Insets;
-            import javafx.scene.layout.GridPane;
-            import javafx.scene.layout.VBox;
+import javafx.css.converter.StringConverter;
+import javafx.fxml.FXML;
+import javafx.scene.control.*;
+import javafx.stage.Stage;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.geometry.Insets;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.VBox;
 
-            import javafx.scene.control.DatePicker;
-            import javafx.application.Platform;
-            import java.time.LocalDate;
-            import java.time.format.DateTimeFormatter;
-            import java.time.format.DateTimeParseException;
-            import java.util.ArrayList;
-            import java.util.List;
-            import java.util.Optional;
+import javafx.scene.control.DatePicker;
+import javafx.application.Platform;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.function.BiConsumer;
 
 public class LogEditorController {
+
+    private boolean logsEdited = false;
+    private RegistroTrabalho mostRecentlyEditedLog = null; // Track most recently edited log
 
     @FXML
     private TableView<RegistroTrabalho> logTable;
@@ -46,6 +50,7 @@ public class LogEditorController {
 
     private List<RegistroTrabalho> registros = new ArrayList<>();
     private Runnable onSaveCallback;
+    private BiConsumer<String, String> onFilterCallback; // For year and month
 
     public void setRegistros(List<RegistroTrabalho> registros) {
         this.registros = registros;
@@ -56,6 +61,10 @@ public class LogEditorController {
 
     public void setOnSaveCallback(Runnable callback) {
         this.onSaveCallback = callback;
+    }
+
+    public void setOnFilterCallback(BiConsumer<String, String> callback) {
+        this.onFilterCallback = callback;
     }
 
     @FXML
@@ -169,38 +178,6 @@ public class LogEditorController {
     }
 
     @FXML
-    public void onEditLog() {
-        RegistroTrabalho selected = logTable.getSelectionModel().getSelectedItem();
-        if (selected != null) {
-            editLogEntry(selected);
-        } else {
-            showAlert(Alert.AlertType.WARNING, "No Selection / Nenhuma Seleção",
-                    "Please select a log entry to edit.\nPor favor, selecione um registro para editar.");
-        }
-    }
-
-    @FXML
-    public void onDeleteLog() {
-        RegistroTrabalho selected = logTable.getSelectionModel().getSelectedItem();
-        if (selected != null) {
-            Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
-                    "Are you sure you want to delete this log entry?\nTem certeza de que deseja excluir este registro?",
-                    ButtonType.YES, ButtonType.NO);
-            confirmation.setHeaderText("Confirm Deletion / Confirmar Exclusão");
-
-            confirmation.showAndWait().ifPresent(response -> {
-                if (response == ButtonType.YES) {
-                    registros.remove(selected);
-                    saveAndRefreshLogs("✔ Log deleted.\n✔ Registro excluído.");
-                }
-            });
-        } else {
-            showAlert(Alert.AlertType.WARNING, "No Selection / Nenhuma Seleção",
-                    "Please select a log entry to delete.\nPor favor, selecione um registro para excluir.");
-        }
-    }
-
-    @FXML
     public void onClearAllLogs() {
         Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
                 "Are you sure you want to delete ALL log entries?\nTem certeza de que deseja excluir TODOS os registros?",
@@ -213,12 +190,6 @@ public class LogEditorController {
                 saveAndRefreshLogs("✔ All logs cleared.\n✔ Todos os registros foram excluídos.");
             }
         });
-    }
-
-    @FXML
-    public void onClose() {
-        Stage stage = (Stage) closeBtn.getScene().getWindow();
-        stage.close();
     }
 
     private void editLogEntry(RegistroTrabalho entry) {
@@ -368,22 +339,13 @@ public class LogEditorController {
             int index = registros.indexOf(entry);
             if (index >= 0) {
                 registros.set(index, updatedEntry);
-                saveAndRefreshLogs("Log entry updated successfully.");
+                markChangesMade();
+                logsEdited = true;
+                mostRecentlyEditedLog = updatedEntry; // Track most recently edited log
+                refreshLogTable();
+                showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso", "✔ Log entry updated.\n✔ Registro atualizado.");
             }
         });
-    }
-
-
-    private void saveAndRefreshLogs(String successMessage) {
-        try {
-            FileLoader.salvarRegistros(AppConstants.WORKLOG_PATH, registros);
-            refreshLogTable();
-            if (onSaveCallback != null) onSaveCallback.run();
-            showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso", successMessage);
-        } catch (Exception e) {
-            showAlert(Alert.AlertType.ERROR, "Error / Erro",
-                    "Failed to save changes:\nFalha ao salvar alterações:\n" + e.getMessage());
-        }
     }
 
     private void showAlert(Alert.AlertType type, String title, String content) {
@@ -392,5 +354,149 @@ public class LogEditorController {
         alert.setHeaderText(null);
         alert.setContentText(content);
         alert.showAndWait();
+    }
+
+    private boolean changesMade = false;
+
+    // Add this method to mark changes made
+    private void markChangesMade() {
+        changesMade = true;
+    }
+
+    // Modify the existing methods to mark changes
+    @FXML
+    public void onEditLog() {
+        RegistroTrabalho selected = logTable.getSelectionModel().getSelectedItem();
+        if (selected != null) {
+            editLogEntry(selected);
+            // Changes might have been made in editLogEntry
+        } else {
+            showAlert(Alert.AlertType.WARNING, "No Selection / Nenhuma Seleção",
+                    "Please select a log entry to edit.\nPor favor, selecione um registro para editar.");
+        }
+    }
+
+    @FXML
+    public void onDeleteLog() {
+        RegistroTrabalho selected = logTable.getSelectionModel().getSelectedItem();
+        if (selected != null) {
+            Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
+                    "Are you sure you want to delete this log entry?\nTem certeza de que deseja excluir este registro?",
+                    ButtonType.YES, ButtonType.NO);
+            confirmation.setHeaderText("Confirm Deletion / Confirmar Exclusão");
+
+            confirmation.showAndWait().ifPresent(response -> {
+                if (response == ButtonType.YES) {
+                    registros.remove(selected);
+                    markChangesMade();
+
+                    // Save changes immediately to file
+                    try {
+                        FileLoader.salvarRegistros(AppConstants.WORKLOG_PATH, registros);
+                        refreshLogTable();
+                        showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso",
+                                "✔ Log deleted.\n✔ Registro excluído.");
+                    } catch (Exception e) {
+                        showAlert(Alert.AlertType.ERROR, "Error / Erro",
+                                "Failed to save changes:\nFalha ao salvar alterações:\n" + e.getMessage());
+                    }
+                }
+            });
+        } else {
+            showAlert(Alert.AlertType.WARNING, "No Selection / Nenhuma Seleção",
+                    "Please select a log entry to delete.\nPor favor, selecione um registro para excluir.");
+        }
+    }
+    @FXML
+    public void onSave() {
+        try {
+            // First save the changes to the file
+            FileLoader.salvarRegistros(AppConstants.WORKLOG_PATH, registros);
+            refreshLogTable();
+
+            // Reset the change tracking flags before callbacks
+            boolean wasEdited = logsEdited;
+            RegistroTrabalho editedLog = mostRecentlyEditedLog;
+
+            // Always reset flags after saving
+            changesMade = false;
+            logsEdited = false;
+            mostRecentlyEditedLog = null;
+
+            // Only run filter callback if we had edits and a log to filter to
+            if (wasEdited && editedLog != null && onFilterCallback != null) {
+                try {
+                    // Get date from the edited log
+                    LocalDate date = LocalDate.parse(editedLog.getData(), DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+
+                    // Log what's happening
+                    System.out.println("Updating filters to edited log date: " + editedLog.getData());
+
+                    // Trigger the filter callback with date info
+                    onFilterCallback.accept(
+                            String.valueOf(date.getYear()),
+                            String.format("%02d", date.getMonthValue())
+                    );
+
+                    // Show success message
+                    showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso", "✔ Changes saved successfully.\n✔ Alterações salvas com sucesso.");
+                    return;
+                } catch (Exception e) {
+                    System.err.println("Error parsing date for filter: " + e.getMessage());
+                }
+            }
+
+            // Run normal callback only if we didn't use the filter callback
+            if (onSaveCallback != null && wasEdited) {
+                onSaveCallback.run();
+            }
+
+            showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso", "✔ Changes saved successfully.\n✔ Alterações salvas com sucesso.");
+        } catch (Exception e) {
+            showAlert(Alert.AlertType.ERROR, "Error / Erro",
+                    "Failed to save changes:\nFalha ao salvar alterações:\n" + e.getMessage());
+        }
+    }
+
+    // Modify the close method to check for unsaved changes
+    @FXML
+    public void onClose() {
+        if (changesMade) {
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                    "You have unsaved changes. Do you want to save before closing?\n" +
+                            "Você tem alterações não salvas. Deseja salvar antes de fechar?",
+                    ButtonType.YES, ButtonType.NO, ButtonType.CANCEL);
+            confirm.setHeaderText("Unsaved Changes / Alterações Não Salvas");
+
+            Optional<ButtonType> result = confirm.showAndWait();
+            if (result.isPresent()) {
+                if (result.get() == ButtonType.YES) {
+                    onSave();
+                    Stage stage = (Stage) closeBtn.getScene().getWindow();
+                    stage.close();
+                } else if (result.get() == ButtonType.NO) {
+                    Stage stage = (Stage) closeBtn.getScene().getWindow();
+                    stage.close();
+                }
+                // If CANCEL, do nothing and keep the editor open
+            }
+        } else {
+            Stage stage = (Stage) closeBtn.getScene().getWindow();
+            stage.close();
+        }
+    }
+
+    // Update saveAndRefreshLogs to not call the callback
+    private void saveAndRefreshLogs(String successMessage) {
+        try {
+            FileLoader.salvarRegistros(AppConstants.WORKLOG_PATH, registros);
+            refreshLogTable();
+            changesMade = false;
+            // Note: We're not calling callbacks here
+            showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso", successMessage);
+        } catch (Exception e) {
+            showAlert(Alert.AlertType.ERROR, "Error / Erro",
+                    "Failed to save changes:\nFalha ao salvar alterações:\n" + e.getMessage());
+        }
     }
 }

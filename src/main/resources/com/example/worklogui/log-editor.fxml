@@ -19,6 +19,7 @@
         <Button fx:id="editLogBtn" text="Edit Entry" onAction="#onEditLog" />
         <Button fx:id="deleteLogBtn" text="Delete Entry" onAction="#onDeleteLog" />
         <Button fx:id="clearAllLogsBtn" text="Clear All" onAction="#onClearAllLogs" />
+        <Button fx:id="saveBtn" text="Save Changes" onAction="#onSave" />
         <Button fx:id="closeBtn" text="Close" onAction="#onClose" />
     </HBox>
 </VBox>

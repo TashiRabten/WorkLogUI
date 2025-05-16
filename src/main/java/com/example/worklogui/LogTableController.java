@@ -31,11 +31,16 @@ public class LogTableController {
     private final CompanyManagerService service;
     private ObservableList<DisplayEntry> displayEntries = FXCollections.observableArrayList();
     private Consumer<String> statusMessageHandler;
+    private FilterController filterController;
+
 
     public LogTableController(CompanyManagerService service) {
         this.service = service;
     }
 
+    public void setFilterController(FilterController filterController) {
+        this.filterController = filterController;
+    }
     /**
      * Set up table columns and event handlers
      */
@@ -246,9 +251,6 @@ public class LogTableController {
         }
     }
 
-    /**
-     * Handle edit log entry button click
-     */
     public void onEditLogEntry() {
         DisplayEntry selected = logTable.getSelectionModel().getSelectedItem();
         if (selected == null || selected.isBill()) {
@@ -256,7 +258,7 @@ public class LogTableController {
             return;
         }
 
-        // Open log editor
+        // Open log editor with current filter settings
         LogEditorUI editor = new LogEditorUI();
         editor.setOnClose(() -> {
             try {
@@ -266,12 +268,16 @@ public class LogTableController {
                 e.printStackTrace();
             }
         });
-        editor.show((Stage) logTable.getScene().getWindow());
+
+        // Pass the current filter values
+
+        String year = filterController.getSelectedYear();
+        String month = filterController.getSelectedMonth();
+        String company = filterController.getSelectedCompany();
+
+        editor.show((Stage) logTable.getScene().getWindow(), year, month, company);
     }
 
-    /**
-     * Handle delete log entry button click
-     */
     public void onDeleteLogEntry() {
         DisplayEntry selected = logTable.getSelectionModel().getSelectedItem();
         if (selected == null || selected.isBill()) {
@@ -294,6 +300,13 @@ public class LogTableController {
 
                     service.deleteRegistro(selected.getRegistro());
                     setStatusMessage("✔ Entry deleted.\n✔ Registro excluído.");
+
+                    // Immediately reload data to refresh UI
+                    updateTable(
+                            filterController.getSelectedYear(),
+                            filterController.getSelectedMonth(),
+                            filterController.getSelectedCompany()
+                    );
                 } catch (Exception e) {
                     showAlert(Alert.AlertType.ERROR, "Delete Error",
                             "Failed to delete entry.\nFalha ao excluir registro.\n" + e.getMessage());

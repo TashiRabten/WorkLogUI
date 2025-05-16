@@ -120,7 +120,6 @@ public class WorkLogEntryController {
             lastAddedEntryDate = parsedDate;
             lastAddedCompany = empresa;
 
-            dateField.setValue(LocalDate.now()); // Reset to today's date
             valueField.clear();
             doublePayCheckBox.setSelected(false);
 
