@@ -123,30 +123,71 @@ public class CompanyManagerUI {
     }
 
     private void refreshAfterWorkLogged() {
+        System.out.println("🔍 DEBUG: refreshAfterWorkLogged called");
+
         // Get the date of the log entry that was just added
         LocalDate entryDate = workLogEntryController.getLastAddedEntryDate();
         String company = workLogEntryController.getLastAddedCompany();
 
+        // IMPORTANT: Reload all data first to ensure we have the latest entries
+        try {
+            service.reloadRegistros();
+        } catch (Exception e) {
+            System.err.println("Error reloading registros: " + e.getMessage());
+            e.printStackTrace();
+        }
+
         if (entryDate != null) {
-            // Refresh the year/month map
+            System.out.println("🔍 DEBUG: Last added entry date: " + entryDate);
+
+            // Refresh the year/month map AFTER reload
             filterController.refreshYearToMonthsMap();
 
             // Update filter dropdowns and set to match entry date
+            String year = String.valueOf(entryDate.getYear());
+            String month = String.format("%02d", entryDate.getMonthValue());
+
+            System.out.println("🔍 DEBUG: Setting filters to: " + year + "-" + month);
+
+            // Update year dropdown items before setting values
             filterController.updateYearFilterItems();
-            filterController.setFilterValues(
-                    String.valueOf(entryDate.getYear()),
-                    String.format("%02d", entryDate.getMonthValue()),
-                    "All"
-            );
+
+            // Now set the filter values
+            filterController.setFilterValues(year, month, "All");
 
             // Apply the filter
             onApplyFilter();
         } else {
-            // Fallback to old behavior if no date available
+            System.out.println("🔍 DEBUG: No date available for last added entry, using fallback");
+            // Fallback to old behavior if no date available - but still reload
             filterController.refreshYearToMonthsMap();
             filterController.updateYearFilterItems();
             filterController.updateMonthFilter();
             onApplyFilter();
+        }
+    }
+    private void updateFiltersWithYearMonth(String year, String month) {
+        try {
+            System.out.println("🔍 DEBUG: Updating filters to: " + year + "-" + month);
+
+            // Reload data first to ensure we have the latest changes
+            service.reloadRegistros();
+
+            // Refresh filter data
+            filterController.refreshYearToMonthsMap();
+
+            // Update year dropdown items (this adds the new year if it wasn't there before)
+            filterController.updateYearFilterItems();
+
+            // Set the filter values to the new date
+            filterController.setFilterValues(year, month, "All");
+
+            // Apply the filter
+            onApplyFilter();
+
+        } catch (Exception e) {
+            System.err.println("Error updating filters: " + e.getMessage());
+            e.printStackTrace();
         }
     }
     private void refreshAfterBillsUpdated() {
@@ -310,18 +351,7 @@ public class CompanyManagerUI {
 
         // Create a filter callback that first reloads the data, then sets the filter
         editor.setOnFilterCallback((year, month) -> {
-            try {
-                // First reload the logs data
-                service.reloadRegistros();
-
-                // Then set filter values
-                filterController.setFilterValues(year, month, "All");
-
-                // Apply filter
-                onApplyFilter();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            updateFiltersWithYearMonth(year, month);
         });
 
         // The regular close callback (for when filter callback isn't triggered)

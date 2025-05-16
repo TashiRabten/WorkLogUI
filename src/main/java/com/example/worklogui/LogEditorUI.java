@@ -1,3 +1,4 @@
+
 package com.example.worklogui;
 
 import javafx.fxml.FXMLLoader;
@@ -14,21 +15,36 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
 
+/**
+ * Updated LogEditorUI that properly sets up callbacks for filter updates
+ */
 public class LogEditorUI {
 
     private Runnable onCloseCallback;
     private BiConsumer<String, String> onFilterCallback;
 
+    /**
+     * Set the callback for when the editor is closed without explicit filtering
+     */
     public void setOnClose(Runnable callback) {
         this.onCloseCallback = callback;
     }
 
+    /**
+     * Set the callback for when a filter update is needed
+     * This callback is used to update the year/month filters in the main UI
+     */
     public void setOnFilterCallback(BiConsumer<String, String> callback) {
         this.onFilterCallback = callback;
     }
 
+    /**
+     * Show the log editor with the specified filter values
+     */
     public void show(Stage owner, String year, String month, String company) {
         try {
+            System.out.println("Opening log editor with filters: year=" + year + ", month=" + month + ", company=" + company);
+
             // Load FXML
             FXMLLoader loader = new FXMLLoader(getClass().getResource("log-editor.fxml"));
             Parent root = loader.load();
@@ -67,6 +83,7 @@ public class LogEditorUI {
                     }
                 } catch (Exception e) {
                     // Skip entries with invalid dates
+                    System.err.println("Skipping log with invalid date: " + log.getData());
                 }
             }
 
@@ -82,17 +99,29 @@ public class LogEditorUI {
                 }
             });
 
+            System.out.println("Filtered logs: " + filteredLogs.size());
+
             // Set the filtered and sorted logs
             controller.setRegistros(filteredLogs);
+
+            // IMPORTANT: Pass filter values to controller
+            controller.setFilterValues(year, month, company);
 
             // Set callbacks
             controller.setOnSaveCallback(() -> {
                 if (onCloseCallback != null) {
+                    System.out.println("Running onCloseCallback from LogEditorUI");
                     onCloseCallback.run();
                 }
             });
 
-            controller.setOnFilterCallback(onFilterCallback);
+            // Set filter callback - CRITICAL for updating filter dropdowns with new years/months
+            controller.setOnFilterCallback((newYear, newMonth) -> {
+                if (onFilterCallback != null) {
+                    System.out.println("Running onFilterCallback with year=" + newYear + ", month=" + newMonth);
+                    onFilterCallback.accept(newYear, newMonth);
+                }
+            });
 
             // Create and show the window
             Stage stage = new Stage();

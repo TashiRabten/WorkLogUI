@@ -278,6 +278,7 @@ public class LogTableController {
         editor.show((Stage) logTable.getScene().getWindow(), year, month, company);
     }
 
+    // Solution:
     public void onDeleteLogEntry() {
         DisplayEntry selected = logTable.getSelectionModel().getSelectedItem();
         if (selected == null || selected.isBill()) {
@@ -292,21 +293,35 @@ public class LogTableController {
         confirm.showAndWait().ifPresent(response -> {
             if (response == ButtonType.YES) {
                 try {
-                    // Check if this is for the current month
-                    LocalDate entryDate = selected.getDate();
-                    LocalDate now = LocalDate.now();
-                    boolean isCurrentMonth = entryDate.getYear() == now.getYear() &&
-                            entryDate.getMonthValue() == now.getMonthValue();
-
+                    // Delete the registro from the service
                     service.deleteRegistro(selected.getRegistro());
+
+                    // Manually remove the item from the displayEntries list
+                    displayEntries.remove(selected);
+
+                    // Refresh the table display
+                    logTable.refresh();
+
                     setStatusMessage("✔ Entry deleted.\n✔ Registro excluído.");
 
-                    // Immediately reload data to refresh UI
-                    updateTable(
-                            filterController.getSelectedYear(),
-                            filterController.getSelectedMonth(),
-                            filterController.getSelectedCompany()
-                    );
+                    // Update the AGI summary
+                    String year = filterController.getSelectedYear();
+                    String month = filterController.getSelectedMonth();
+                    String company = filterController.getSelectedCompany();
+
+                    // Get fresh data from the service
+                    List<RegistroTrabalho> filteredRegistros = service.applyFilters(year, month, company);
+                    List<Bill> filteredBills = new ArrayList<>();
+
+                    // Get bills for the current filters
+                    if (!"All".equals(year) && !"All".equals(month)) {
+                        String ym = year + "-" + month;
+                        filteredBills = service.getBillsForMonth(ym);
+                    }
+
+                    // Update AGI summary
+                    updateAGISummary(filteredRegistros, filteredBills);
+
                 } catch (Exception e) {
                     showAlert(Alert.AlertType.ERROR, "Delete Error",
                             "Failed to delete entry.\nFalha ao excluir registro.\n" + e.getMessage());
