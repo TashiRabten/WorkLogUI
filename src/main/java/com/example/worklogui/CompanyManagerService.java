@@ -1,48 +1,110 @@
 package com.example.worklogui;
 
+import com.example.worklogui.services.WorkLogFileManager;
+import com.example.worklogui.utils.DateUtils;
+import com.example.worklogui.utils.ErrorHandler;
+import com.example.worklogui.utils.FilterHelper;
+import com.example.worklogui.utils.ValidationHelper;
+import com.example.worklogui.utils.FileMigrationUtility;
+
 import java.io.IOException;
 import java.nio.file.*;
-import java.text.NumberFormat;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 public class CompanyManagerService {
 
-    private static final Path WORKLOG_PATH = FileLoader.getDefaultPath();
     private static final Path BILLS_DIR = Paths.get(System.getProperty("user.home"), "Documents", "WorkLog", "bills");
-    // CRITICAL: Changed to always use new list instances for values to avoid shared references
+
+    // Use the new file manager for work logs
+    private final WorkLogFileManager workLogFileManager = new WorkLogFileManager();
+
+    // Cache for bills (keep existing pattern)
     private Map<String, List<Bill>> bills = new HashMap<>();
 
-    private List<RegistroTrabalho> registros = new ArrayList<>();
-
+    // Cached filter data
     private Set<String> years = new TreeSet<>();
     private Set<String> months = new TreeSet<>();
     private Set<String> companies = new TreeSet<>();
 
     public void initialize() throws Exception {
-        FileLoader.inicializarArquivo(WORKLOG_PATH);
-        registros = FileLoader.carregarRegistros(WORKLOG_PATH);
-        CompanyRateService.getInstance().refreshRates();
-        populateFilters();
+        try {
+            // Initialize the work log file manager
+            workLogFileManager.initialize();
+
+            // Check for and migrate old worklog.json file if it exists
+            migrateOldWorklogFileIfExists();
+
+            // Initialize company rates
+            CompanyRateService.getInstance().refreshRates();
+
+            // Populate filters from available data
+            populateFilters();
+
+            // Set up error handler
+            ErrorHandler.setStatusMessageHandler(message -> {
+                System.err.println("Service Error: " + message);
+            });
+
+        } catch (Exception e) {
+            throw new Exception("Failed to initialize service: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Check for old worklog.json file and migrate it if it exists
+     */
+    private void migrateOldWorklogFileIfExists() {
+        try {
+            Path oldWorklogFile = AppConstants.WORKLOG_PATH;
+            Path logsDirectory = AppConstants.LOGS_FOLDER;
+
+            if (Files.exists(oldWorklogFile)) {
+                System.out.println("🔍 Found old worklog.json file, starting migration...");
+                FileMigrationUtility.migrateOldWorklogFile(oldWorklogFile, logsDirectory);
+                System.out.println("✅ Migration completed successfully");
+            }
+        } catch (Exception e) {
+            System.err.println("⚠️ Migration failed, but continuing with initialization: " + e.getMessage());
+            // Don't throw exception here - allow app to continue even if migration fails
+        }
     }
 
     public void reloadRegistros() throws Exception {
-        registros = FileLoader.carregarRegistros(WORKLOG_PATH);
-        populateFilters();
+        try {
+            // Clear cache to force reload
+            workLogFileManager.clearCache();
+            populateFilters();
+        } catch (Exception e) {
+            throw new Exception("Failed to reload work logs: " + e.getMessage(), e);
+        }
     }
 
     public List<RegistroTrabalho> getRegistros() {
-        return registros;
+        try {
+            return workLogFileManager.getAllWorkLogs();
+        } catch (Exception e) {
+            ErrorHandler.handleUnexpectedError("loading all work logs", e);
+            return new ArrayList<>();
+        }
     }
 
     public RegistroTrabalho logWork(LocalDate date, String company, double timeValue, boolean doublePay) throws Exception {
-        String formattedDate = date.format(DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+        // Validate inputs
+        String dateString = DateUtils.formatDisplayDate(date);
+        ValidationHelper.WorkLogValidationResult validation =
+                ValidationHelper.validateWorkLogEntry(dateString, company, String.valueOf(timeValue));
 
+        if (!validation.isValid()) {
+            throw new Exception(validation.getErrorMessage());
+        }
+
+        // Get rate info for company
         RateInfo info = CompanyRateService.getInstance().getRateInfoMap().getOrDefault(company, new RateInfo(0.0, "hour"));
 
+        // Create new work log entry
         RegistroTrabalho newEntry = new RegistroTrabalho();
-        newEntry.setData(formattedDate);
+        newEntry.setData(dateString);
         newEntry.setEmpresa(company);
         newEntry.setPagamentoDobrado(doublePay);
         newEntry.setTaxaUsada(info.getValor());
@@ -56,11 +118,17 @@ public class CompanyManagerService {
             newEntry.setMinutos(0);
         }
 
-        registros.add(newEntry);
-        FileLoader.salvarRegistros(WORKLOG_PATH, registros);
-        populateFilters();
+        try {
+            // Save using the file manager
+            workLogFileManager.addWorkLog(newEntry);
 
-        return newEntry;
+            // Update filters
+            populateFilters();
+
+            return newEntry;
+        } catch (Exception e) {
+            throw new Exception("Failed to save work log: " + e.getMessage(), e);
+        }
     }
 
     public double calculateEarnings(RegistroTrabalho registro) {
@@ -83,11 +151,9 @@ public class CompanyManagerService {
             Path path = getBillPath(yearMonth);
             System.out.println("🔍 DEBUG: Loading bills from: " + path);
             List<Bill> result = carregarBills(path);
-            // Store a defensive copy
             this.bills.put(yearMonth, new ArrayList<>(result));
             System.out.println("🔍 DEBUG: Loaded " + result.size() + " bills");
         }
-        // Return a defensive copy
         return new ArrayList<>(this.bills.getOrDefault(yearMonth, new ArrayList<>()));
     }
 
@@ -101,7 +167,6 @@ public class CompanyManagerService {
                     System.out.println("Deleting empty bill file: " + path);
                     Files.delete(path);
                 }
-                // Remove from cache when file is deleted
                 this.bills.remove(yearMonth);
                 System.out.println("Removed " + yearMonth + " from bills cache");
             } catch (IOException e) {
@@ -114,7 +179,6 @@ public class CompanyManagerService {
                 System.out.println("Saving " + billList.size() + " bills to " + yearMonth);
                 boolean success = FileLoader.salvarBills(path, billList);
                 if (success) {
-                    // Update cache with a defensive copy
                     this.bills.put(yearMonth, new ArrayList<>(billList));
                     System.out.println("💾 Saved " + billList.size() + " bills to file.");
                 } else {
@@ -128,7 +192,6 @@ public class CompanyManagerService {
             }
         }
 
-        // Verify file state after operation
         System.out.println("Final file state - exists: " + Files.exists(path));
         if (Files.exists(path)) {
             System.out.println("File size: " + Files.size(path) + " bytes");
@@ -136,7 +199,7 @@ public class CompanyManagerService {
     }
 
     public void clearBillCache() {
-        this.bills.clear(); // Clear the cache to force reload from disk
+        this.bills.clear();
         System.out.println("🔄 Bill cache cleared");
     }
 
@@ -149,65 +212,54 @@ public class CompanyManagerService {
     }
 
     public void deleteRegistro(RegistroTrabalho registro) throws Exception {
-        registros.remove(registro);
-        FileLoader.salvarRegistros(WORKLOG_PATH, registros);
+        try {
+            boolean removed = workLogFileManager.removeWorkLog(registro);
+            if (!removed) {
+                throw new Exception("Work log entry not found for deletion");
+            }
 
-        // Reload data to ensure consistency
-        registros = FileLoader.carregarRegistros(WORKLOG_PATH);
-
-        populateFilters();
+            // Update filters
+            populateFilters();
+        } catch (Exception e) {
+            throw new Exception("Failed to delete work log: " + e.getMessage(), e);
+        }
     }
 
     public List<RegistroTrabalho> applyFilters(String year, String month, String company) {
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
-        List<RegistroTrabalho> filtered = new ArrayList<>();
-
-        for (RegistroTrabalho r : registros) {
-            try {
-                LocalDate date = LocalDate.parse(r.getData(), formatter);
-                boolean match = true;
-
-                if (year != null && !year.isEmpty()) {
-                    match &= String.valueOf(date.getYear()).equals(year);
-                }
-
-                if (month != null && !month.isEmpty()) {
-                    match &= String.format("%02d", date.getMonthValue()).equals(month);
-                }
-
-                // Handle "All" or null as no filter
-                if (company != null && !company.equalsIgnoreCase("All") && !company.isEmpty()) {
-                    match &= company.equals(r.getEmpresa());
-                }
-
-                if (match) filtered.add(r);
-            } catch (Exception e) {
-                System.err.println("⚠ Skipping invalid date: " + r.getData());
-            }
+        try {
+            return workLogFileManager.getFilteredWorkLogs(year, month, company);
+        } catch (Exception e) {
+            ErrorHandler.handleUnexpectedError("filtering work logs", e);
+            return new ArrayList<>();
         }
-
-        return filtered;
     }
 
     public void populateFilters() {
-        years.clear();
-        months.clear();
-        companies.clear();
+        try {
+            List<RegistroTrabalho> allLogs = workLogFileManager.getAllWorkLogs();
 
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+            years.clear();
+            months.clear();
+            companies.clear();
 
-        for (RegistroTrabalho r : registros) {
-            try {
-                LocalDate date = LocalDate.parse(r.getData(), formatter);
-                years.add(String.valueOf(date.getYear()));
-                months.add(String.format("%02d", date.getMonthValue()));
-            } catch (Exception e) {
-                System.err.println("⚠ Invalid date format: " + r.getData());
+            years.addAll(FilterHelper.extractYears(allLogs));
+            months.addAll(FilterHelper.extractMonths(allLogs));
+            companies.addAll(FilterHelper.extractCompanies(allLogs));
+
+            // Also add years/months from bills
+            Map<String, List<Bill>> allBills = getAllBills();
+            for (String yearMonth : allBills.keySet()) {
+                if (yearMonth.length() >= 7) {
+                    String year = DateUtils.getYearFromKey(yearMonth);
+                    String month = DateUtils.getMonthFromKey(yearMonth);
+                    if (year != null && month != null) {
+                        years.add(year);
+                        months.add(month);
+                    }
+                }
             }
-
-            if (r.getEmpresa() != null) {
-                companies.add(r.getEmpresa());
-            }
+        } catch (Exception e) {
+            ErrorHandler.handleUnexpectedError("populating filters", e);
         }
     }
 
@@ -216,22 +268,17 @@ public class CompanyManagerService {
     public Set<String> getCompanies() { return companies; }
 
     public Map<String, List<Bill>> getAllBills() {
-        // Always create a fresh map
         Map<String, List<Bill>> all = new HashMap<>();
-
-        // Clear cache first to ensure we reload from disk
         this.bills.clear();
 
         if (Files.exists(BILLS_DIR)) {
             try (DirectoryStream<Path> stream = Files.newDirectoryStream(BILLS_DIR, "*.json")) {
                 for (Path path : stream) {
-                    String filename = path.getFileName().toString(); // e.g., "2026-12.json"
+                    String filename = path.getFileName().toString();
                     String ym = filename.replace(".json", "");
                     List<Bill> billList = carregarBills(path);
                     if (!billList.isEmpty()) {
-                        // Update cache with a defensive copy
                         this.bills.put(ym, new ArrayList<>(billList));
-                        // Add to result map
                         all.put(ym, new ArrayList<>(billList));
                     }
                 }
@@ -246,11 +293,17 @@ public class CompanyManagerService {
     public String calculateTimeTotal() {
         Map<String, double[]> totais = new HashMap<>();
 
-        for (RegistroTrabalho r : registros) {
-            String empresa = r.getEmpresa();
-            totais.putIfAbsent(empresa, new double[2]);
-            totais.get(empresa)[0] += r.getHoras();
-            totais.get(empresa)[1] += r.getMinutos();
+        try {
+            List<RegistroTrabalho> allLogs = workLogFileManager.getAllWorkLogs();
+            for (RegistroTrabalho r : allLogs) {
+                String empresa = r.getEmpresa();
+                totais.putIfAbsent(empresa, new double[2]);
+                totais.get(empresa)[0] += r.getHoras();
+                totais.get(empresa)[1] += r.getMinutos();
+            }
+        } catch (Exception e) {
+            ErrorHandler.handleUnexpectedError("calculating time total", e);
+            return "Error calculating time total: " + e.getMessage();
         }
 
         StringBuilder sb = new StringBuilder("Total Summary / Resumo Total:\n\n");
@@ -278,11 +331,17 @@ public class CompanyManagerService {
         double total = 0;
         Map<String, Double> ganhos = new HashMap<>();
 
-        for (RegistroTrabalho r : registros) {
-            String empresa = r.getEmpresa();
-            double ganho = calculateEarnings(r);
-            ganhos.put(empresa, ganhos.getOrDefault(empresa, 0.0) + ganho);
-            total += ganho;
+        try {
+            List<RegistroTrabalho> allLogs = workLogFileManager.getAllWorkLogs();
+            for (RegistroTrabalho r : allLogs) {
+                String empresa = r.getEmpresa();
+                double ganho = calculateEarnings(r);
+                ganhos.put(empresa, ganhos.getOrDefault(empresa, 0.0) + ganho);
+                total += ganho;
+            }
+        } catch (Exception e) {
+            ErrorHandler.handleUnexpectedError("calculating earnings", e);
+            return "Error calculating earnings: " + e.getMessage();
         }
 
         StringBuilder sb = new StringBuilder("Earnings / Ganho Total:\n\n");
@@ -297,25 +356,30 @@ public class CompanyManagerService {
     public String getSummaryByMonthAndYear() {
         Map<String, Double> monthTotals = new TreeMap<>();
         Map<String, Double> yearTotals = new TreeMap<>();
-        DateTimeFormatter formato = DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
-        for (RegistroTrabalho r : registros) {
-            try {
-                LocalDate date = LocalDate.parse(r.getData(), formato);
-                String year = String.valueOf(date.getYear());
-                String monthKey = year + "-" + String.format("%02d", date.getMonthValue());
-                double earnings = calculateEarnings(r);
+        try {
+            List<RegistroTrabalho> allLogs = workLogFileManager.getAllWorkLogs();
+            for (RegistroTrabalho r : allLogs) {
+                try {
+                    LocalDate date = DateUtils.parseDisplayDate(r.getData());
+                    String year = String.valueOf(date.getYear());
+                    String monthKey = DateUtils.getYearMonthKey(date);
+                    double earnings = calculateEarnings(r);
 
-                monthTotals.put(monthKey, monthTotals.getOrDefault(monthKey, 0.0) + earnings);
-                yearTotals.put(year, yearTotals.getOrDefault(year, 0.0) + earnings);
-            } catch (Exception ignored) {}
+                    monthTotals.put(monthKey, monthTotals.getOrDefault(monthKey, 0.0) + earnings);
+                    yearTotals.put(year, yearTotals.getOrDefault(year, 0.0) + earnings);
+                } catch (Exception ignored) {}
+            }
+        } catch (Exception e) {
+            ErrorHandler.handleUnexpectedError("calculating summary", e);
+            return "Error calculating summary: " + e.getMessage();
         }
 
         StringBuilder sb = new StringBuilder("📆 Year-Month Summary:\n\n");
         String currentYear = "";
         for (String monthKey : monthTotals.keySet()) {
-            String year = monthKey.substring(0, 4);
-            if (!year.equals(currentYear)) {
+            String year = DateUtils.getYearFromKey(monthKey);
+            if (year != null && !year.equals(currentYear)) {
                 if (!currentYear.isEmpty()) {
                     // Insert the total for the previous year
                     sb.append(String.format("%s Grand Total → $%.2f\n\n", currentYear, yearTotals.get(currentYear)));
@@ -335,22 +399,110 @@ public class CompanyManagerService {
     }
 
     public void exportToExcel() throws IOException {
-        List<DisplayEntry> allEntries = new ArrayList<>();
-        for (RegistroTrabalho r : registros) {
-            allEntries.add(new DisplayEntry(r));
-        }
+        try {
+            List<DisplayEntry> allEntries = new ArrayList<>();
 
-        // Clear bill cache to ensure fresh data
-        clearBillCache();
+            // Add all work logs
+            List<RegistroTrabalho> allLogs = workLogFileManager.getAllWorkLogs();
+            for (RegistroTrabalho r : allLogs) {
+                allEntries.add(new DisplayEntry(r));
+            }
 
-        for (List<Bill> monthlyBills : getAllBills().values()) {
-            allEntries.addAll(monthlyBills.stream().map(DisplayEntry::new).toList());
+            // Clear bill cache to ensure fresh data
+            clearBillCache();
+
+            // Add all bills
+            for (List<Bill> monthlyBills : getAllBills().values()) {
+                allEntries.addAll(monthlyBills.stream().map(DisplayEntry::new).toList());
+            }
+
+            allEntries.sort(Comparator.comparing(DisplayEntry::getDate));
+            boolean isAllExport = true;
+            ExcelExporter.exportToExcel(allEntries, this, isAllExport);
+
+        } catch (Exception e) {
+            throw new IOException("Failed to export to Excel: " + e.getMessage(), e);
         }
-        allEntries.sort(Comparator.comparing(DisplayEntry::getDate));
-        boolean isAllExport = true;
-        ExcelExporter.exportToExcel(allEntries, this, isAllExport);
+    }
+
+    /**
+     * Update an existing work log entry
+     */
+    public void updateWorkLog(RegistroTrabalho oldLog, RegistroTrabalho newLog) throws Exception {
+        try {
+            boolean updated = workLogFileManager.updateWorkLog(oldLog, newLog);
+            if (!updated) {
+                throw new Exception("Work log entry not found for update");
+            }
+
+            // Update filters
+            populateFilters();
+        } catch (Exception e) {
+            throw new Exception("Failed to update work log: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Get work logs for a specific year-month
+     */
+    public List<RegistroTrabalho> getWorkLogsForMonth(String yearMonthKey) {
+        try {
+            return workLogFileManager.getWorkLogs(yearMonthKey);
+        } catch (Exception e) {
+            ErrorHandler.handleUnexpectedError("loading work logs for " + yearMonthKey, e);
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * Clear work log cache
+     */
+    public void clearWorkLogCache() {
+        workLogFileManager.clearCache();
+    }
+
+    /**
+     * Clear cache for specific month
+     */
+    public void clearWorkLogCache(String yearMonthKey) {
+        workLogFileManager.clearCache(yearMonthKey);
+    }
+
+    /**
+     * Get the work log file manager (for advanced operations)
+     */
+    public WorkLogFileManager getWorkLogFileManager() {
+        return workLogFileManager;
+    }
+
+    /**
+     * Save work logs for a specific month (used by external components)
+     */
+    public void saveWorkLogsForMonth(String yearMonthKey, List<RegistroTrabalho> logs) throws Exception {
+        try {
+            workLogFileManager.saveWorkLogs(yearMonthKey, logs);
+        } catch (Exception e) {
+            throw new Exception("Failed to save work logs for " + yearMonthKey + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Cleanup old backup files
+     */
+    public void cleanupOldBackups() {
+        workLogFileManager.cleanupOldBackups();
+    }
+
+    /**
+     * Get year-to-months mapping from work logs
+     */
+    public Map<String, List<String>> getYearToMonthsMap() {
+        try {
+            List<RegistroTrabalho> allLogs = workLogFileManager.getAllWorkLogs();
+            return FilterHelper.buildYearToMonthsMap(allLogs);
+        } catch (Exception e) {
+            ErrorHandler.handleUnexpectedError("building year-month map", e);
+            return new HashMap<>();
+        }
     }
 }
-
-
-

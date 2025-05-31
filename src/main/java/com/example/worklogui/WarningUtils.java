@@ -52,90 +52,6 @@ public class WarningUtils {
         }
     }
 
-    public static String generateCurrentMonthWarning(List<RegistroTrabalho> registros) {
-        LocalDate now = LocalDate.now();
-        int currentYear = now.getYear();
-        int currentMonth = now.getMonthValue();
-
-        double sgaLimit = AGICalculator.getSGALimit(currentYear);
-
-        // Get the service to calculate NESE
-        CompanyManagerService service = new CompanyManagerService();
-        try {
-            service.initialize();
-
-            // Get bills for current month
-            String yearMonth = String.format("%d-%02d", currentYear, currentMonth);
-            List<Bill> monthBills = service.getBillsForMonth(yearMonth);
-
-            // Filter registros for current month
-            List<RegistroTrabalho> currentMonthRegistros = new ArrayList<>();
-            for (RegistroTrabalho r : registros) {
-                try {
-                    LocalDate date = LocalDate.parse(r.getData(), DATE_FORMATTER);
-                    if (date.getYear() == currentYear && date.getMonthValue() == currentMonth) {
-                        currentMonthRegistros.add(r);
-                    }
-                } catch (Exception e) {
-                    // Skip invalid dates
-                }
-            }
-
-            // Calculate AGI - specify that data is monthly
-            AGICalculator.AGIResult result = AGICalculator.calculateAGI(currentMonthRegistros, monthBills, true);
-            double monthlyNESE = result.monthlySSACountableIncome;
-
-            return generateWarningMessage(monthlyNESE, sgaLimit, "Current month");
-        } catch (Exception e) {
-            // Fall back to gross income calculation if something fails
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    public static String generateFilteredWarning(List<RegistroTrabalho> registros, String selectedYear,
-                                                 String selectedMonth) {
-        // If "All" is selected for either year or month, we can't show a meaningful warning
-        if ("All".equalsIgnoreCase(selectedYear) || "All".equalsIgnoreCase(selectedMonth)) {
-            return null;
-        }
-
-        int year = Integer.parseInt(selectedYear);
-        int month = Integer.parseInt(selectedMonth);
-        double sgaLimit = AGICalculator.getSGALimit(year);
-
-        // Get the service to calculate NESE
-        CompanyManagerService service = new CompanyManagerService();
-        try {
-            service.initialize();
-            String yearMonth = String.format("%d-%02d", year, month);
-            List<Bill> monthBills = service.getBillsForMonth(yearMonth);
-
-            // Filter registros for the selected month
-            List<RegistroTrabalho> monthRegistros = new ArrayList<>();
-            for (RegistroTrabalho r : registros) {
-                try {
-                    LocalDate date = LocalDate.parse(r.getData(), DATE_FORMATTER);
-                    if (date.getYear() == year && date.getMonthValue() == month) {
-                        monthRegistros.add(r);
-                    }
-                } catch (Exception e) {
-                    // Skip invalid dates
-                }
-            }
-
-            // Calculate AGI - specify that data is monthly
-            AGICalculator.AGIResult result = AGICalculator.calculateAGI(monthRegistros, monthBills, true);
-            double monthlyNESE = result.monthlySSACountableIncome;
-
-            String context = String.format("%02d/%d", month, year);
-            return generateWarningMessage(monthlyNESE, sgaLimit, context);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
     public static String generateStartupWarningBlock(List<RegistroTrabalho> registros) {
         String warning = generateCurrentMonthWarning(registros);
         if (warning == null) return null;
@@ -257,6 +173,107 @@ public class WarningUtils {
         } catch (Exception e) {
             e.printStackTrace();
             return false;
+        }
+    }
+
+    // In WarningUtils.java - Replace these two methods:
+
+    public static String generateCurrentMonthWarning(List<RegistroTrabalho> registros) {
+        return generateCurrentMonthWarning(registros, null);
+    }
+
+    // NEW: Overloaded method that accepts service parameter
+    public static String generateCurrentMonthWarning(List<RegistroTrabalho> registros, CompanyManagerService service) {
+        LocalDate now = LocalDate.now();
+        int currentYear = now.getYear();
+        int currentMonth = now.getMonthValue();
+
+        double sgaLimit = AGICalculator.getSGALimit(currentYear);
+
+        try {
+            // Use provided service or create new one
+            if (service == null) {
+                service = new CompanyManagerService();
+                service.initialize();
+            }
+
+            // Get bills for current month
+            String yearMonth = String.format("%d-%02d", currentYear, currentMonth);
+            List<Bill> monthBills = service.getBillsForMonth(yearMonth);
+
+            // Filter registros for current month
+            List<RegistroTrabalho> currentMonthRegistros = new ArrayList<>();
+            for (RegistroTrabalho r : registros) {
+                try {
+                    LocalDate date = LocalDate.parse(r.getData(), DATE_FORMATTER);
+                    if (date.getYear() == currentYear && date.getMonthValue() == currentMonth) {
+                        currentMonthRegistros.add(r);
+                    }
+                } catch (Exception e) {
+                    // Skip invalid dates
+                }
+            }
+
+            // Calculate AGI - specify that data is monthly
+            AGICalculator.AGIResult result = AGICalculator.calculateAGI(currentMonthRegistros, monthBills, true);
+            double monthlyNESE = result.monthlySSACountableIncome;
+
+            return generateWarningMessage(monthlyNESE, sgaLimit, "Current month");
+        } catch (Exception e) {
+            // Fall back to gross income calculation if something fails
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public static String generateFilteredWarning(List<RegistroTrabalho> registros, String selectedYear, String selectedMonth) {
+        return generateFilteredWarning(registros, selectedYear, selectedMonth, null);
+    }
+
+    // NEW: Overloaded method that accepts service parameter
+    public static String generateFilteredWarning(List<RegistroTrabalho> registros, String selectedYear,
+                                                 String selectedMonth, CompanyManagerService service) {
+        // If "All" is selected for either year or month, we can't show a meaningful warning
+        if ("All".equalsIgnoreCase(selectedYear) || "All".equalsIgnoreCase(selectedMonth)) {
+            return null;
+        }
+
+        int year = Integer.parseInt(selectedYear);
+        int month = Integer.parseInt(selectedMonth);
+        double sgaLimit = AGICalculator.getSGALimit(year);
+
+        try {
+            // Use provided service or create new one
+            if (service == null) {
+                service = new CompanyManagerService();
+                service.initialize();
+            }
+
+            String yearMonth = String.format("%d-%02d", year, month);
+            List<Bill> monthBills = service.getBillsForMonth(yearMonth);
+
+            // Filter registros for the selected month
+            List<RegistroTrabalho> monthRegistros = new ArrayList<>();
+            for (RegistroTrabalho r : registros) {
+                try {
+                    LocalDate date = LocalDate.parse(r.getData(), DATE_FORMATTER);
+                    if (date.getYear() == year && date.getMonthValue() == month) {
+                        monthRegistros.add(r);
+                    }
+                } catch (Exception e) {
+                    // Skip invalid dates
+                }
+            }
+
+            // Calculate AGI - specify that data is monthly
+            AGICalculator.AGIResult result = AGICalculator.calculateAGI(monthRegistros, monthBills, true);
+            double monthlyNESE = result.monthlySSACountableIncome;
+
+            String context = String.format("%02d/%d", month, year);
+            return generateWarningMessage(monthlyNESE, sgaLimit, context);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
         }
     }
 }

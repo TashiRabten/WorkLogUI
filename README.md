@@ -1,9 +1,10 @@
 # WorkLogUI
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/f23bd6a8b8564852974cc0ee7f39249f)](https://app.codacy.com/gh/TashiRabten/WorkLogUI/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
-[![Version](https://img.shields.io/badge/version-1.1.8-blue.svg)](https://github.com/TashiRabten/WorkLogUI/releases)
+[![Version](https://img.shields.io/badge/version-1.1.9-blue.svg)](https://github.com/TashiRabten/WorkLogUI/releases)
 [![JavaFX](https://img.shields.io/badge/JavaFX-24.0.1-orange.svg)](https://openjfx.io/)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey.svg)](https://github.com/TashiRabten/WorkLogUI/releases)
 
-A comprehensive JavaFX-based time tracking and billing management application designed for self-employed professionals and independent contractors. Features advanced tax calculations, AGI (Adjusted Gross Income) reporting, and SSDI-compliant earnings monitoring for disability benefits recipients.
+A comprehensive JavaFX-based time tracking and billing management application designed for self-employed professionals and independent contractors. Features advanced tax calculations, AGI (Adjusted Gross Income) reporting, and SSDI-compliant earnings monitoring for disability benefits recipients. **Now available for both Windows and macOS!**
 
 ---
 
@@ -53,6 +54,7 @@ A comprehensive JavaFX-based time tracking and billing management application de
 - Automatic update checks at startup with seamless installation
 - Manual update option available in the application interface
 - **NEW**: Intelligent data migration system for legacy bill formats
+- **NEW**: Monthly file structure for improved performance
 - **NEW**: Automatic category assignment for existing expenses
 - Backup protection with automatic file versioning
 - Robust data validation and error recovery
@@ -62,7 +64,9 @@ A comprehensive JavaFX-based time tracking and billing management application de
 ## 🖥️ Installation
 
 ### Requirements
-- **Operating System**: Windows 10 or later
+- **Operating System**:
+    - **Windows**: Windows 10 or later
+    - **macOS**: macOS 10.15 (Catalina) or later
 - **Java Runtime**: Java 21+ (bundled with installer - no separate installation needed)
 - **Memory**: 256MB RAM minimum, 512MB recommended
 - **Storage**: 50MB for application, additional space for log files
@@ -70,6 +74,22 @@ A comprehensive JavaFX-based time tracking and billing management application de
 ### Download
 Download the latest release from the [releases page](https://github.com/TashiRabten/WorkLogUI/releases):
 - **Windows**: `worklog-setup-[version].exe`
+- **macOS**: `WorkLog-[version].pkg`
+
+### Platform-Specific Installation
+
+#### Windows Installation
+1. Download `worklog-setup-[version].exe`
+2. Run the installer (may require administrator privileges)
+3. Follow the installation wizard
+4. Launch from Start Menu or Desktop shortcut
+
+#### macOS Installation
+1. Download `WorkLog-[version].pkg`
+2. Double-click to open the installer
+3. Follow the installation wizard
+4. Launch from Applications folder or Launchpad
+5. **Note**: On first launch, you may need to allow the app in System Preferences > Security & Privacy
 
 ### Build from Source
 ```bash
@@ -158,15 +178,27 @@ For users receiving disability benefits:
 ## 📁 Data Storage & Security
 
 ### Data Storage
-All data is stored locally in your Documents folder for privacy and security:
-- **Windows**: `C:\Users\[username]\Documents\WorkLog\`
+All data is stored locally for privacy and security:
 
-Files structure:
-- `worklog.json`: Time tracking entries
+#### Windows
+- **Location**: `C:\Users\[username]\Documents\WorkLog\`
+
+#### macOS
+- **Location**: `/Users/[username]/Documents/WorkLog/`
+
+### File Structure (Both Platforms)
+- `logs/`: Monthly work log files organized by year-month (e.g., `2025-01.json`)
+- `bills/`: Monthly bill records organized by year-month (e.g., `2025-01.json`)
 - `company-rates.json`: Company configurations and rates
-- `bills/`: Monthly bill records organized by year-month
 - `exports/`: Excel export files with timestamps
 - `installer/`: Auto-updater downloads (temporary)
+
+### NEW: Monthly File Architecture
+**Version 1.1.9** introduces an improved file structure:
+- Work logs are now stored in separate monthly files for better performance
+- Automatic migration from legacy `worklog.json` format
+- Faster loading and filtering with large datasets
+- Improved data integrity and backup capabilities
 
 ### NEW: SGA Warning System
 The application includes an intelligent warning system specifically designed for SSDI recipients:
@@ -191,8 +223,8 @@ The application includes an intelligent warning system specifically designed for
 ## 🛠️ Technical Details
 
 ### Technologies & Architecture
-- **JavaFX 24.0.1**: Modern, responsive UI framework
-- **Java 21**: Latest LTS version with enhanced performance
+- **JavaFX 24.0.1**: Modern, responsive UI framework with native platform integration
+- **Java 21**: Latest LTS version with enhanced performance and cross-platform compatibility
 - **Maven**: Dependency management and build system
 - **Apache POI**: Excel export with advanced formatting
 - **Jackson**: Robust JSON processing for data persistence
@@ -200,6 +232,12 @@ The application includes an intelligent warning system specifically designed for
 - **Service Layer**: Business logic isolation
 - **Observer Pattern**: Reactive UI updates
 - **Singleton Services**: Efficient resource management
+
+### Cross-Platform Compatibility
+- **Native Look & Feel**: Adapts to platform-specific UI guidelines
+- **File System Integration**: Proper path handling for Windows and macOS
+- **System Tray Integration**: Platform-appropriate system integration
+- **Keyboard Shortcuts**: Platform-specific key combinations (Cmd on Mac, Ctrl on Windows)
 
 ### NEW: Tax Calculation Engine
 - **AGI Calculator**: Comprehensive tax calculations following IRS guidelines
@@ -226,11 +264,15 @@ The application includes an intelligent warning system specifically designed for
 
 ## 🔄 Auto-Updates
 
-- ✅ Automatic update checking on startup
+### Cross-Platform Update System
+- ✅ Automatic update checking on startup (Windows & macOS)
 - 🔄 Manual update check via the update button in interface
-- 📥 Automatic installer download and launch
+- 📥 Platform-specific installer download:
+    - Windows: `.exe` installer with Windows Installer technology
+    - macOS: `.pkg` installer with native macOS installation
 - 🔄 Seamless version upgrades without data loss
 - 💾 Automatic backup creation before major updates
+- 🔐 Code-signed installers for security (macOS Gatekeeper compatible)
 
 ---
 
@@ -238,10 +280,25 @@ The application includes an intelligent warning system specifically designed for
 
 ### Common Issues & Solutions
 
+#### Cross-Platform Issues
+
 **Application doesn't start**
-- Ensure Java 21+ is installed and accessible
-- Check if `worklog.json` is corrupted (delete and restart to recreate)
+- **Windows**: Ensure Java 21+ is installed and accessible
+- **macOS**: Allow the app in System Preferences > Security & Privacy if blocked
+- Check if data files are corrupted (delete WorkLog folder in Documents to recreate)
 - Verify write permissions in Documents/WorkLog directory
+
+**macOS-Specific Issues**
+- **"WorkLog is damaged and can't be opened"**: Right-click and select "Open" to bypass Gatekeeper
+- **Permission denied errors**: Grant Full Disk Access in System Preferences > Security & Privacy > Privacy
+- **App crashes on startup**: Check Console.app for detailed error logs
+
+**Windows-Specific Issues**
+- **Installer fails**: Run as Administrator or temporarily disable antivirus
+- **Missing DLL errors**: Ensure Windows is up to date
+- **Performance issues**: Check Windows Defender isn't scanning the WorkLog folder repeatedly
+
+#### Data Issues
 
 **SGA warnings not appearing**
 - Verify your earnings data is current and properly categorized
@@ -252,19 +309,12 @@ The application includes an intelligent warning system specifically designed for
 - Check available disk space (exports can be large with extensive data)
 - Ensure export folder exists and has write permissions
 - Try exporting smaller date ranges if file size is excessive
-- Verify no other application has the export file open
+- **macOS**: Verify Excel isn't running and blocking file access
 
-**Bills not calculating correctly**
-- Ensure expense categories are properly set (deductible vs non-deductible)
-- Check home office expenses are using correct percentage (default 9%)
-- Verify bill dates fall within the selected filter range
-- Review bill amounts for data entry errors
-
-**Update fails**
-- Check internet connection stability
-- Ensure write permissions in application directory
-- Try manually downloading from releases page if auto-update fails
-- Temporarily disable antivirus during update process
+**Data migration issues (upgrading to 1.1.9)**
+- Backup your Documents/WorkLog folder before upgrading
+- Old `worklog.json` files are automatically migrated to monthly structure
+- If migration fails, the app will prompt to restore from backup
 
 ---
 
@@ -276,6 +326,7 @@ The application includes an intelligent warning system specifically designed for
 - **Disability Advocates**: Help clients track earnings within benefit guidelines
 - **Small Business Owners**: Simple time tracking with professional tax reporting
 - **Tax Professionals**: Provide clients with detailed, categorized expense tracking
+- **Cross-Platform Teams**: Consistent experience across Windows and macOS environments
 
 ---
 
@@ -286,6 +337,7 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 - 🔧 Code contributions and pull requests
 - 🌍 Translations and localization improvements
 - 📖 Documentation enhancements
+- 🖥️ Platform-specific testing (Windows/macOS)
 
 ### Code Style & Guidelines
 - Follow Java naming conventions and best practices
@@ -294,8 +346,10 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 - Maintain bilingual support (English/Portuguese) for all user-facing text
 - Include unit tests for new financial calculation features
 - Document any changes to AGI or SGA calculation logic
+- Test on both Windows and macOS platforms before submitting PRs
 
 ### Priority Areas for Contribution
+- **Linux Support**: Native packaging for Linux distributions
 - **Internationalization**: Additional language support beyond English/Portuguese
 - **Tax Features**: Support for additional countries' tax systems
 - **Accessibility**: Enhanced support for screen readers and keyboard navigation
@@ -316,9 +370,10 @@ MIT License - This software is open-source and free to use, modify, and distribu
 - **Apache POI Team**: For comprehensive Excel functionality
 - **Jackson Team**: For robust JSON processing capabilities
 - **SSDI Community**: For feedback on SGA compliance features
-- **Beta Testers**: For extensive testing of tax calculation accuracy
+- **Beta Testers**: For extensive testing of tax calculation accuracy across platforms
 - **Disability Rights Advocates**: For guidance on accessibility features
 - **Contributors and Translators**: For expanding language support
+- **macOS Beta Testers**: For helping perfect the macOS experience
 
 ---
 
@@ -327,6 +382,7 @@ MIT License - This software is open-source and free to use, modify, and distribu
 For comprehensive support and detailed documentation:
 - **Issues & Bug Reports**: [GitHub Issues](https://github.com/TashiRabten/WorkLogUI/issues)
 - **Feature Requests**: Use the "enhancement" label on GitHub Issues
+- **Platform-Specific Issues**: Tag issues with "Windows" or "macOS" labels
 - **Tax Calculation Questions**: See the built-in help tooltips and Excel export documentation
 - **SGA Compliance**: Refer to official SSA guidelines; this tool is for tracking only
 - **Developer Documentation**: Check the [Wiki](https://github.com/TashiRabten/WorkLogUI/wiki) for detailed guides
@@ -335,8 +391,8 @@ For comprehensive support and detailed documentation:
 
 ---
 
-**Note**: WorkLogUI is designed specifically for self-employed professionals, independent contractors, and individuals receiving disability benefits who need precise earnings tracking for SGA compliance. The advanced tax calculation features make it particularly suitable for users who need detailed financial reporting for tax preparation or disability benefit monitoring.
+**Note**: WorkLogUI is designed specifically for self-employed professionals, independent contractors, and individuals receiving disability benefits who need precise earnings tracking for SGA compliance. The advanced tax calculation features make it particularly suitable for users who need detailed financial reporting for tax preparation or disability benefit monitoring. **Now available on both Windows and macOS for maximum flexibility.**
 
 ---
 
-*Last updated: January 2025 | Version 1.1.8+*
+*Last updated: January 2025 | Version 1.1.9+*

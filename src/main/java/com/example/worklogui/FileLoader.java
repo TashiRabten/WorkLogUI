@@ -4,89 +4,26 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-
 import com.fasterxml.jackson.databind.DeserializationFeature;
-import java.nio.file.StandardCopyOption;
 
+import java.nio.file.StandardCopyOption;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 
+/**
+ * File loader now focused only on bills - work logs are handled by WorkLogFileManager
+ */
 public class FileLoader {
-
-
 
     private static final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
-            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Optional: makes dates readable
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    private static final Path RATES_PATH = Paths.get(
-            System.getProperty("user.home"),
-            "Documents", "WorkLog", "company-rates.json"
-    );
-
-    public static Path getDefaultPath() {
-        return AppConstants.WORKLOG_PATH;
-    }
-
-    private static WorkLogData cache = null;
-
-    public static void inicializarArquivo(Path path) {
-        try {
-            Files.createDirectories(path.getParent());
-
-            if (!Files.exists(path)) {
-                salvarTudo(path, new WorkLogData());
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public static WorkLogData carregarTudo(Path path) {
-        if (!Files.exists(path)) return new WorkLogData();
-
-        try {
-            // Try loading full structure
-            return objectMapper.readValue(path.toFile(), WorkLogData.class);
-        } catch (Exception e) {
-            // Fallback: try to load as raw list
-            try {
-                List<RegistroTrabalho> rawList = objectMapper.readValue(path.toFile(), new TypeReference<>() {});
-                WorkLogData fallback = new WorkLogData();
-                fallback.setRegistros(rawList);
-                fallback.setBills(new HashMap<>());
-                salvarTudo(path, fallback); // upgrade file
-                return fallback;
-            } catch (Exception inner) {
-                inner.printStackTrace();
-                return new WorkLogData();
-            }
-        }
-    }
-
-
-    public static void salvarTudo(Path path, WorkLogData data) {
-        try {
-            Files.createDirectories(path.getParent());
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), data);
-            cache = data;
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    // Helper accessors
-    public static List<RegistroTrabalho> carregarRegistros(Path path) {
-        return carregarTudo(path).getRegistros();
-    }
-
-    public static void salvarRegistros(Path path, List<RegistroTrabalho> registros) {
-        WorkLogData data = carregarTudo(path);
-        data.setRegistros(registros);
-        salvarTudo(path, data);
-    }
-
+    /**
+     * Load bills from a specific file
+     */
     public static List<Bill> carregarBills(Path path) {
         if (!Files.exists(path)) {
             System.out.println("Bill file doesn't exist: " + path);
@@ -98,13 +35,7 @@ public class FileLoader {
             String content = Files.readString(path);
             System.out.println("File content length: " + content.length());
 
-            // Create a special ObjectMapper for legacy support
-            ObjectMapper billMapper = new ObjectMapper()
-                    .registerModule(new JavaTimeModule())
-                    .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-                    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-
-            List<Bill> bills = billMapper.readValue(path.toFile(), new TypeReference<List<Bill>>() {});
+            List<Bill> bills = objectMapper.readValue(path.toFile(), new TypeReference<List<Bill>>() {});
             System.out.println("Loaded " + bills.size() + " bills");
 
             // Initialize categories for all bills after loading
@@ -126,20 +57,18 @@ public class FileLoader {
             return new ArrayList<>();
         }
     }
+
+    /**
+     * Save bills to a specific file
+     */
     public static boolean salvarBills(Path path, List<Bill> bills) {
         try {
             Files.createDirectories(path.getParent());
 
             System.out.println("Saving " + bills.size() + " bills to: " + path);
 
-            // Create ObjectMapper with proper configuration
-            ObjectMapper billMapper = new ObjectMapper()
-                    .registerModule(new JavaTimeModule())
-                    .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-                    .enable(SerializationFeature.INDENT_OUTPUT);
-
             // Convert to JSON
-            String json = billMapper.writeValueAsString(bills);
+            String json = objectMapper.writeValueAsString(bills);
             System.out.println("JSON to save (" + json.length() + " chars): " +
                     (json.length() > 200 ? json.substring(0, 200) + "..." : json));
 
@@ -172,4 +101,59 @@ public class FileLoader {
         }
     }
 
+    // Legacy methods for backward compatibility - these methods are now deprecated
+    // and will be removed in future versions
+
+    /**
+     * @deprecated Use WorkLogFileManager instead
+     */
+    @Deprecated
+    public static Path getDefaultPath() {
+        return AppConstants.WORKLOG_PATH;
+    }
+
+    /**
+     * @deprecated Use WorkLogFileManager instead
+     */
+    @Deprecated
+    public static void inicializarArquivo(Path path) {
+        System.out.println("⚠️  WARNING: inicializarArquivo is deprecated. Work logs are now managed by WorkLogFileManager.");
+        // Do nothing - work logs are handled by WorkLogFileManager
+    }
+
+    /**
+     * @deprecated Use WorkLogFileManager instead
+     */
+    @Deprecated
+    public static WorkLogData carregarTudo(Path path) {
+        System.out.println("⚠️  WARNING: carregarTudo is deprecated. Work logs are now managed by WorkLogFileManager.");
+        return new WorkLogData(); // Return empty data
+    }
+
+    /**
+     * @deprecated Use WorkLogFileManager instead
+     */
+    @Deprecated
+    public static void salvarTudo(Path path, WorkLogData data) {
+        System.out.println("⚠️  WARNING: salvarTudo is deprecated. Work logs are now managed by WorkLogFileManager.");
+        // Do nothing - work logs are handled by WorkLogFileManager
+    }
+
+    /**
+     * @deprecated Use WorkLogFileManager instead
+     */
+    @Deprecated
+    public static List<RegistroTrabalho> carregarRegistros(Path path) {
+        System.out.println("⚠️  WARNING: carregarRegistros is deprecated. Use CompanyManagerService.getRegistros() instead.");
+        return new ArrayList<>(); // Return empty list
+    }
+
+    /**
+     * @deprecated Use WorkLogFileManager instead
+     */
+    @Deprecated
+    public static void salvarRegistros(Path path, List<RegistroTrabalho> registros) {
+        System.out.println("⚠️  WARNING: salvarRegistros is deprecated. Use CompanyManagerService methods instead.");
+        // Do nothing - work logs are handled by WorkLogFileManager
+    }
 }

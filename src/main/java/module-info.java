@@ -15,5 +15,10 @@ module com.example.worklogui {
     requires java.sql;
 
     opens com.example.worklogui to javafx.fxml, com.fasterxml.jackson.databind;
+    opens com.example.worklogui.utils to com.fasterxml.jackson.databind;
+    opens com.example.worklogui.services to com.fasterxml.jackson.databind;
+
     exports com.example.worklogui;
+    exports com.example.worklogui.utils;
+    exports com.example.worklogui.services;
 }

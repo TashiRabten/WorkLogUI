@@ -1,6 +1,6 @@
-
 package com.example.worklogui;
 
+import com.example.worklogui.utils.FilterHelper;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -12,16 +12,25 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.function.BiConsumer;
 
 /**
- * Updated LogEditorUI that properly sets up callbacks for filter updates
+ * Updated LogEditorUI that works with the new file handling system
  */
 public class LogEditorUI {
 
     private Runnable onCloseCallback;
     private BiConsumer<String, String> onFilterCallback;
+    private CompanyManagerService service;
+
+    /**
+     * Set the service to use for data operations
+     */
+    public void setService(CompanyManagerService service) {
+        this.service = service;
+    }
 
     /**
      * Set the callback for when the editor is closed without explicit filtering
@@ -32,7 +41,6 @@ public class LogEditorUI {
 
     /**
      * Set the callback for when a filter update is needed
-     * This callback is used to update the year/month filters in the main UI
      */
     public void setOnFilterCallback(BiConsumer<String, String> callback) {
         this.onFilterCallback = callback;
@@ -42,7 +50,22 @@ public class LogEditorUI {
      * Show the log editor with the specified filter values
      */
     public void show(Stage owner, String year, String month, String company) {
+        show(owner, year, month, company, null);
+    }
+
+    /**
+     * Show the log editor with the specified filter values and service
+     */
+    public void show(Stage owner, String year, String month, String company, CompanyManagerService serviceParam) {
         try {
+            // Use provided service or create new one
+            if (serviceParam != null) {
+                this.service = serviceParam;
+            } else if (this.service == null) {
+                this.service = new CompanyManagerService();
+                this.service.initialize();
+            }
+
             System.out.println("Opening log editor with filters: year=" + year + ", month=" + month + ", company=" + company);
 
             // Load FXML
@@ -52,48 +75,19 @@ public class LogEditorUI {
             // Get the controller
             LogEditorController controller = loader.getController();
 
-            // Load all logs
-            List<RegistroTrabalho> allLogs = FileLoader.carregarRegistros(AppConstants.WORKLOG_PATH);
-            List<RegistroTrabalho> filteredLogs = new ArrayList<>();
+            // Set the service in the controller
+            controller.setService(this.service);
 
-            // Apply filters
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
-            for (RegistroTrabalho log : allLogs) {
-                try {
-                    LocalDate date = LocalDate.parse(log.getData(), formatter);
-                    boolean matches = true;
-
-                    // Check year filter
-                    if (!"All".equals(year)) {
-                        matches &= String.valueOf(date.getYear()).equals(year);
-                    }
-
-                    // Check month filter
-                    if (!"All".equals(month)) {
-                        matches &= String.format("%02d", date.getMonthValue()).equals(month);
-                    }
-
-                    // Check company filter
-                    if (!"All".equals(company)) {
-                        matches &= log.getEmpresa().equals(company);
-                    }
-
-                    if (matches) {
-                        filteredLogs.add(log);
-                    }
-                } catch (Exception e) {
-                    // Skip entries with invalid dates
-                    System.err.println("Skipping log with invalid date: " + log.getData());
-                }
-            }
+            // Load all logs and apply filters
+            List<RegistroTrabalho> allLogs = this.service.getRegistros();
+            List<RegistroTrabalho> filteredLogs = FilterHelper.applyFilters(allLogs, year, month, company);
 
             // Sort logs by date (newest first)
             filteredLogs.sort((a, b) -> {
                 try {
-                    LocalDate dateA = LocalDate.parse(a.getData(), formatter);
-                    LocalDate dateB = LocalDate.parse(b.getData(), formatter);
-                    // For newest first (descending order)
-                    return dateB.compareTo(dateA);
+                    LocalDate dateA = LocalDate.parse(a.getData(), DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+                    LocalDate dateB = LocalDate.parse(b.getData(), DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+                    return dateB.compareTo(dateA); // Newest first
                 } catch (Exception e) {
                     return 0;
                 }
@@ -104,7 +98,7 @@ public class LogEditorUI {
             // Set the filtered and sorted logs
             controller.setRegistros(filteredLogs);
 
-            // IMPORTANT: Pass filter values to controller
+            // Pass filter values to controller
             controller.setFilterValues(year, month, company);
 
             // Set callbacks
@@ -115,7 +109,7 @@ public class LogEditorUI {
                 }
             });
 
-            // Set filter callback - CRITICAL for updating filter dropdowns with new years/months
+            // Set filter callback for updating filter dropdowns with new years/months
             controller.setOnFilterCallback((newYear, newMonth) -> {
                 if (onFilterCallback != null) {
                     System.out.println("Running onFilterCallback with year=" + newYear + ", month=" + newMonth);
@@ -137,11 +131,21 @@ public class LogEditorUI {
                     "❌ Error opening Log Editor: " + e.getMessage() + "\n" +
                             "❌ Erro ao abrir o Editor de Registros: " + e.getMessage())
                     .showAndWait();
+        } catch (Exception e) {
+            e.printStackTrace();
+            new Alert(Alert.AlertType.ERROR,
+                    "❌ Unexpected error: " + e.getMessage() + "\n" +
+                            "❌ Erro inesperado: " + e.getMessage())
+                    .showAndWait();
         }
     }
 
-    // Keep the original method for backward compatibility
+    /**
+     * Keep the original method for backward compatibility
+     */
     public void show(Stage owner) {
-        show(owner, "All", "All", "All");
+        show(owner, "All", "All", "All", null);
     }
+
+
 }

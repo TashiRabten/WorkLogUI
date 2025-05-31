@@ -1,6 +1,8 @@
 package com.example.worklogui;
 
-import javafx.css.converter.StringConverter;
+import com.example.worklogui.utils.DateUtils;
+import com.example.worklogui.utils.ErrorHandler;
+import com.example.worklogui.utils.FilterHelper;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.stage.Stage;
@@ -8,12 +10,10 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.geometry.Insets;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
-
-import javafx.scene.control.DatePicker;
 import javafx.application.Platform;
+
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -48,15 +48,20 @@ public class LogEditorController {
 
     private List<RegistroTrabalho> registros = new ArrayList<>();
     private Runnable onSaveCallback;
+    private CompanyManagerService service;
 
-    // NEW: Filter tracking fields
+    // Filter tracking fields
     private String currentFilterYear;
     private String currentFilterMonth;
     private String currentFilterCompany;
     private BiConsumer<String, String> onFilterCallback;
 
+    public void setService(CompanyManagerService service) {
+        this.service = service;
+    }
+
     public void setRegistros(List<RegistroTrabalho> registros) {
-        this.registros = registros;
+        this.registros = new ArrayList<>(registros); // Defensive copy
         if (logTable != null) {
             refreshLogTable();
         }
@@ -66,9 +71,6 @@ public class LogEditorController {
         this.onSaveCallback = callback;
     }
 
-    /**
-     * NEW: Method to store filter values
-     */
     public void setFilterValues(String year, String month, String company) {
         this.currentFilterYear = year;
         this.currentFilterMonth = month;
@@ -76,9 +78,6 @@ public class LogEditorController {
         System.out.println("Filter values set: year=" + year + ", month=" + month + ", company=" + company);
     }
 
-    /**
-     * NEW: Method to set filter callback
-     */
     public void setOnFilterCallback(BiConsumer<String, String> callback) {
         this.onFilterCallback = callback;
     }
@@ -91,32 +90,29 @@ public class LogEditorController {
 
     private void setupLogTable() {
         try {
-            // Check if we already have the dateColumn from FXML
+            // Date column
             if (dateColumn != null) {
                 dateColumn.setCellValueFactory(cellData -> new SimpleStringProperty(
                         cellData.getValue().getData()));
             } else {
-                // Create date column if it doesn't exist
                 TableColumn<RegistroTrabalho, String> dateCol = new TableColumn<>("Date");
                 dateCol.setCellValueFactory(cellData -> {
                     try {
-                        LocalDate parsed = LocalDate.parse(cellData.getValue().getData(), DateTimeFormatter.ofPattern("MM/dd/yyyy"));
-                        return new SimpleStringProperty(parsed.format(DateTimeFormatter.ofPattern("MM/dd/yyyy")));
+                        LocalDate parsed = DateUtils.parseDisplayDate(cellData.getValue().getData());
+                        return new SimpleStringProperty(DateUtils.formatDisplayDate(parsed));
                     } catch (Exception e) {
                         return new SimpleStringProperty(cellData.getValue().getData());
                     }
                 });
-
                 dateCol.setPrefWidth(100);
                 logTable.getColumns().add(dateCol);
             }
 
-            // Check if we already have the companyColumn from FXML
+            // Company column
             if (companyColumn != null) {
                 companyColumn.setCellValueFactory(cellData -> new SimpleStringProperty(
                         cellData.getValue().getEmpresa()));
             } else {
-                // Create company column if it doesn't exist
                 TableColumn<RegistroTrabalho, String> companyCol = new TableColumn<>("Company");
                 companyCol.setCellValueFactory(cellData -> new SimpleStringProperty(
                         cellData.getValue().getEmpresa()));
@@ -124,48 +120,38 @@ public class LogEditorController {
                 logTable.getColumns().add(companyCol);
             }
 
-            // Create hours column
+            // Hours column
             TableColumn<RegistroTrabalho, String> hoursCol = new TableColumn<>("Hours");
             hoursCol.setCellValueFactory(cellData -> new SimpleStringProperty(
                     String.format("%.2f", cellData.getValue().getHoras())));
             hoursCol.setPrefWidth(70);
             logTable.getColumns().add(hoursCol);
 
-            // Create minutes column
+            // Minutes column
             TableColumn<RegistroTrabalho, String> minutesCol = new TableColumn<>("Minutes");
             minutesCol.setCellValueFactory(cellData -> new SimpleStringProperty(
                     String.format("%.0f", cellData.getValue().getMinutos())));
             minutesCol.setPrefWidth(70);
             logTable.getColumns().add(minutesCol);
 
-            // Create double pay column
+            // Double pay column
             TableColumn<RegistroTrabalho, String> doublePayCol = new TableColumn<>("Double Pay");
             doublePayCol.setCellValueFactory(cellData -> new SimpleStringProperty(
                     cellData.getValue().isPagamentoDobrado() ? "Yes" : "No"));
             doublePayCol.setPrefWidth(80);
             logTable.getColumns().add(doublePayCol);
 
-            // Create earnings column
+            // Earnings column
             TableColumn<RegistroTrabalho, String> earningsCol = new TableColumn<>("Earnings");
             earningsCol.setCellValueFactory(cellData -> {
                 RegistroTrabalho r = cellData.getValue();
-                String tipo = r.getTipoUsado() != null ? r.getTipoUsado() : "hour";
-                double taxa = r.getTaxaUsada();
-                double earnings;
-
-                if (tipo.equalsIgnoreCase("minuto")) {
-                    earnings = r.getMinutos() * taxa;
+                if (service != null) {
+                    double earnings = service.calculateEarnings(r);
+                    return new SimpleStringProperty(String.format("$%.2f", earnings));
                 } else {
-                    earnings = (r.getHoras() * taxa) + (r.getMinutos() * (taxa / 60.0));
+                    return new SimpleStringProperty("N/A");
                 }
-
-                if (r.isPagamentoDobrado()) {
-                    earnings *= 2;
-                }
-
-                return new SimpleStringProperty(String.format("$%.2f", earnings));
             });
-
             earningsCol.setPrefWidth(80);
             logTable.getColumns().add(earningsCol);
 
@@ -204,9 +190,6 @@ public class LogEditorController {
         }
     }
 
-    /**
-     * UPDATED: onDeleteLog with immediate save
-     */
     @FXML
     public void onDeleteLog() {
         RegistroTrabalho selected = logTable.getSelectionModel().getSelectedItem();
@@ -220,33 +203,26 @@ public class LogEditorController {
 
             confirmation.showAndWait().ifPresent(response -> {
                 if (response == ButtonType.YES) {
-                    // Remove from the local list
-                    boolean removed = registros.remove(selected);
-                    System.out.println("Removed from registros list: " + removed);
-
-                    // CRITICAL: Immediately save changes to file
                     try {
-                        System.out.println("Saving changes to file");
-                        FileLoader.salvarRegistros(AppConstants.WORKLOG_PATH, registros);
+                        if (service != null) {
+                            service.deleteRegistro(selected);
+                        }
 
-                        // Update the table display
+                        // Remove from local list
+                        registros.remove(selected);
                         logTable.getItems().remove(selected);
                         logTable.refresh();
-                        System.out.println("Table refreshed after deletion");
 
-                        // Notify via callback
                         if (onSaveCallback != null) {
-                            System.out.println("Running onSaveCallback");
                             onSaveCallback.run();
                         }
 
                         showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso",
                                 "✔ Log deleted.\n✔ Registro excluído.");
                     } catch (Exception e) {
-                        System.err.println("Error saving changes: " + e.getMessage());
-                        e.printStackTrace();
+                        ErrorHandler.handleUnexpectedError("deleting log entry", e);
                         showAlert(Alert.AlertType.ERROR, "Error / Erro",
-                                "Failed to save changes:\nFalha ao salvar alterações:\n" + e.getMessage());
+                                "Failed to delete log entry:\nFalha ao excluir registro:\n" + e.getMessage());
                     }
                 }
             });
@@ -255,6 +231,7 @@ public class LogEditorController {
                     "Please select a log entry to delete.\nPor favor, selecione um registro para excluir.");
         }
     }
+
     @FXML
     public void onClearAllLogs() {
         // Debug output
@@ -267,7 +244,7 @@ public class LogEditorController {
         // Check each log against filter
         int matchingLogs = 0;
         for (RegistroTrabalho log : registros) {
-            boolean matches = matchesFilter(log);
+            boolean matches = FilterHelper.matchesFilters(log, currentFilterYear, currentFilterMonth, currentFilterCompany);
             if (matches) {
                 matchingLogs++;
                 System.out.println("Log matches filter: " + log.getData() + " - " + log.getEmpresa());
@@ -276,11 +253,8 @@ public class LogEditorController {
         System.out.println("Logs matching filter: " + matchingLogs);
         System.out.println("=====================");
 
-        // First check if we have any active filters
-        final boolean hasFilter =
-                (currentFilterYear != null && !currentFilterYear.equals("All")) ||
-                        (currentFilterMonth != null && !currentFilterMonth.equals("All")) ||
-                        (currentFilterCompany != null && !currentFilterCompany.equals("All"));
+        // Check if we have active filters
+        final boolean hasFilter = FilterHelper.hasActiveFilters(currentFilterYear, currentFilterMonth, currentFilterCompany);
 
         String confirmMessage = hasFilter ?
                 "Are you sure you want to delete all FILTERED log entries?\nTem certeza de que deseja excluir TODOS os registros FILTRADOS?" :
@@ -298,26 +272,22 @@ public class LogEditorController {
 
         confirmation.showAndWait().ifPresent(response -> {
             if (response == ButtonType.YES) {
-                if (hasFilter) {
-                    System.out.println("Clearing with filters: year=" + currentFilterYear +
-                            ", month=" + currentFilterMonth +
-                            ", company=" + currentFilterCompany);
+                try {
+                    if (hasFilter) {
+                        System.out.println("Clearing with filters: year=" + currentFilterYear +
+                                ", month=" + currentFilterMonth +
+                                ", company=" + currentFilterCompany);
 
-                    // KEY FIX: Load ALL logs from the file first
-                    try {
-                        List<RegistroTrabalho> allLogs = FileLoader.carregarRegistros(AppConstants.WORKLOG_PATH);
-                        System.out.println("Loaded " + allLogs.size() + " total logs from file");
+                        // Get ALL logs from service
+                        List<RegistroTrabalho> allLogs = service != null ? service.getRegistros() : new ArrayList<>();
+                        System.out.println("Loaded " + allLogs.size() + " total logs from service");
 
-                        // Create a new list to hold logs we want to keep
+                        // Create list of logs to keep (those that don't match filter)
                         List<RegistroTrabalho> logsToKeep = new ArrayList<>();
-
-                        // Go through all logs and keep only those that don't match our filter
                         for (RegistroTrabalho log : allLogs) {
-                            if (!matchesFilter(log)) {
-                                // If it doesn't match the filter, keep it
+                            if (!FilterHelper.matchesFilters(log, currentFilterYear, currentFilterMonth, currentFilterCompany)) {
                                 logsToKeep.add(log);
                             } else {
-                                // If it matches the filter, count it for removal
                                 removedCount.incrementAndGet();
                                 System.out.println("Removing log: " + log.getEmpresa() + " on " + log.getData());
                             }
@@ -325,104 +295,76 @@ public class LogEditorController {
 
                         System.out.println("Keeping " + logsToKeep.size() + " logs, removing " + removedCount.get());
 
-                        // Save the filtered list back to file
-                        FileLoader.salvarRegistros(AppConstants.WORKLOG_PATH, logsToKeep);
+                        // Save back using service
+                        if (service != null) {
+                            saveUpdatedLogsToService(logsToKeep);
+                        }
 
-                        // Update our local list for display
+                        // Update local display to show only remaining logs that match current filter
                         registros.clear();
-                        // Only add logs that match our filter for display
                         for (RegistroTrabalho log : logsToKeep) {
-                            if (matchesFilter(log)) {
+                            if (FilterHelper.matchesFilters(log, currentFilterYear, currentFilterMonth, currentFilterCompany)) {
                                 registros.add(log);
                             }
                         }
 
-                    } catch (Exception e) {
-                        System.err.println("Error loading or saving all logs: " + e.getMessage());
-                        e.printStackTrace();
-                        showAlert(Alert.AlertType.ERROR, "Error / Erro",
-                                "Failed to process logs: " + e.getMessage());
-                        return;
+                    } else {
+                        // Clear all logs
+                        removedCount.set(registros.size());
+                        System.out.println("Clearing all " + removedCount.get() + " logs");
+
+                        if (service != null) {
+                            // Delete all logs through service
+                            for (RegistroTrabalho log : new ArrayList<>(registros)) {
+                                service.deleteRegistro(log);
+                            }
+                        }
+
+                        registros.clear();
                     }
-                } else {
-                    // If no filters, clear everything
-                    removedCount.set(registros.size());
-                    System.out.println("Clearing all " + removedCount.get() + " logs");
-                    registros.clear();
 
-                    // Save empty list back to file
-                    try {
-                        FileLoader.salvarRegistros(AppConstants.WORKLOG_PATH, registros);
-                    } catch (Exception e) {
-                        System.err.println("Error saving empty log list: " + e.getMessage());
-                        e.printStackTrace();
-                        showAlert(Alert.AlertType.ERROR, "Error / Erro",
-                                "Failed to save changes: " + e.getMessage());
-                        return;
+                    // Refresh display
+                    refreshLogTable();
+
+                    // Notify callback
+                    if (onSaveCallback != null) {
+                        onSaveCallback.run();
                     }
+
+                    // Show success message
+                    final int finalRemovedCount = removedCount.get();
+                    String successMessage = hasFilter ?
+                            "✔ All filtered logs cleared (" + finalRemovedCount + " entries).\n✔ Todos os registros filtrados foram excluídos (" + finalRemovedCount + " entradas)." :
+                            "✔ All logs cleared.\n✔ Todos os registros foram excluídos.";
+
+                    showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso", successMessage);
+
+                } catch (Exception e) {
+                    ErrorHandler.handleUnexpectedError("clearing logs", e);
+                    showAlert(Alert.AlertType.ERROR, "Error / Erro",
+                            "Failed to clear logs:\nFalha ao limpar registros:\n" + e.getMessage());
                 }
-
-                // Refresh the table
-                refreshLogTable();
-
-                // Notify via callback
-                if (onSaveCallback != null) {
-                    onSaveCallback.run();
-                }
-
-                // Create a final copy of the count for the success message
-                final int finalRemovedCount = removedCount.get();
-
-                // Show success message
-                String successMessage = hasFilter ?
-                        "✔ All filtered logs cleared (" + finalRemovedCount + " entries).\n✔ Todos os registros filtrados foram excluídos (" + finalRemovedCount + " entradas)." :
-                        "✔ All logs cleared.\n✔ Todos os registros foram excluídos.";
-
-                showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso", successMessage);
             }
         });
     }
 
-    /**
-     * Helper method to check if a log matches the current filter
-     */
-    private boolean matchesFilter(RegistroTrabalho log) {
-        try {
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
-            LocalDate date = LocalDate.parse(log.getData(), formatter);
+    private void saveUpdatedLogsToService(List<RegistroTrabalho> allLogs) throws Exception {
+        // Group logs by month
+        var monthlyLogs = FilterHelper.groupByYearMonth(allLogs);
 
-            // Check year filter
-            if (currentFilterYear != null && !currentFilterYear.equals("All")) {
-                String logYear = String.valueOf(date.getYear());
-                if (!logYear.equals(currentFilterYear)) {
-                    return false;
-                }
-            }
+        // Get current monthly files and clear them first
+        List<String> existingKeys = service.getWorkLogFileManager().getAvailableYearMonthKeys();
+        for (String key : existingKeys) {
+            service.getWorkLogFileManager().saveWorkLogs(key, new ArrayList<>());
+        }
 
-            // Check month filter
-            if (currentFilterMonth != null && !currentFilterMonth.equals("All")) {
-                String logMonth = String.format("%02d", date.getMonthValue());
-                if (!logMonth.equals(currentFilterMonth)) {
-                    return false;
-                }
-            }
-
-            // Check company filter
-            if (currentFilterCompany != null && !currentFilterCompany.equals("All")) {
-                if (!log.getEmpresa().equals(currentFilterCompany)) {
-                    return false;
-                }
-            }
-
-            // If we got here, the entry matches all active filters
-            return true;
-        } catch (Exception e) {
-            System.err.println("Error checking if log matches filter: " + e.getMessage());
-            // If there's an error, assume it doesn't match
-            return false;
+        // Save updated logs by month
+        for (var entry : monthlyLogs.entrySet()) {
+            String yearMonth = entry.getKey();
+            List<RegistroTrabalho> monthLogs = entry.getValue();
+            service.getWorkLogFileManager().saveWorkLogs(yearMonth, monthLogs);
         }
     }
-
 
     @FXML
     public void onClose() {
@@ -431,7 +373,6 @@ public class LogEditorController {
     }
 
     private void editLogEntry(RegistroTrabalho entry) {
-        // Create a dialog for editing
         Dialog<RegistroTrabalho> dialog = new Dialog<>();
         dialog.getDialogPane().getStylesheets().add(
                 getClass().getResource("/style.css").toExternalForm()
@@ -440,28 +381,22 @@ public class LogEditorController {
         dialog.setTitle("Edit Log Entry");
         dialog.setHeaderText("Edit Work Log Entry");
 
-        // Set the button types
         ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
 
-        // Create the form grid
         GridPane grid = new GridPane();
         grid.setHgap(10);
         grid.setVgap(10);
         grid.setPadding(new Insets(20, 150, 10, 10));
 
-        // Date picker instead of text field
+        // Date picker
         DatePicker datePicker = new DatePicker();
         datePicker.setConverter(new javafx.util.StringConverter<LocalDate>() {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
             @Override
             public String toString(LocalDate date) {
-                if (date != null) {
-                    return formatter.format(date);
-                } else {
-                    return "";
-                }
+                return date != null ? formatter.format(date) : "";
             }
 
             @Override
@@ -474,13 +409,12 @@ public class LogEditorController {
             }
         });
 
-        // Store original date for comparison later
+        // Store original date for comparison
         LocalDate originalDate = null;
         try {
-            originalDate = LocalDate.parse(entry.getData(), DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+            originalDate = DateUtils.parseDisplayDate(entry.getData());
             datePicker.setValue(originalDate);
         } catch (Exception e) {
-            // If parsing fails, set to today
             datePicker.setValue(LocalDate.now());
         }
 
@@ -489,17 +423,15 @@ public class LogEditorController {
         companyCombo.getItems().addAll(CompanyRateService.getInstance().getRates().keySet());
         companyCombo.setValue(entry.getEmpresa());
 
-        // Hours field
+        // Hours and minutes fields
         TextField hoursField = new TextField(String.format("%.2f", entry.getHoras()));
-
-        // Minutes field
         TextField minutesField = new TextField(String.format("%.0f", entry.getMinutos()));
 
         // Double pay checkbox
         CheckBox doublePayCheck = new CheckBox("Double Pay");
         doublePayCheck.setSelected(entry.isPagamentoDobrado());
 
-        // Add fields to grid
+        // Add to grid
         grid.add(new Label("Date:"), 0, 0);
         grid.add(datePicker, 1, 0);
         grid.add(new Label("Company:"), 0, 1);
@@ -511,18 +443,13 @@ public class LogEditorController {
         grid.add(doublePayCheck, 1, 4);
 
         dialog.getDialogPane().setContent(grid);
-
-        // Request focus on the date picker by default
         Platform.runLater(() -> datePicker.requestFocus());
 
-        // Final reference to original date for use in lambda
         final LocalDate finalOriginalDate = originalDate;
 
-        // Convert the result to a RegistroTrabalho object when the save button is clicked
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == saveButtonType) {
                 try {
-                    // Get date from DatePicker
                     LocalDate selectedDate = datePicker.getValue();
                     if (selectedDate == null) {
                         showAlert(Alert.AlertType.ERROR, "Invalid Date",
@@ -530,28 +457,13 @@ public class LogEditorController {
                         return null;
                     }
 
-                    // Format date to MM/dd/yyyy
-                    String date = selectedDate.format(DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+                    String date = DateUtils.formatDisplayDate(selectedDate);
+                    double hours = Double.parseDouble(hoursField.getText().trim());
+                    double minutes = Double.parseDouble(minutesField.getText().trim());
 
-                    // Validate hours
-                    double hours;
-                    try {
-                        hours = Double.parseDouble(hoursField.getText().trim());
-                        if (hours < 0) throw new NumberFormatException("Hours cannot be negative");
-                    } catch (NumberFormatException e) {
-                        showAlert(Alert.AlertType.ERROR, "Invalid Hours",
-                                "Please enter a valid positive number for hours.");
-                        return null;
-                    }
-
-                    // Validate minutes
-                    double minutes;
-                    try {
-                        minutes = Double.parseDouble(minutesField.getText().trim());
-                        if (minutes < 0) throw new NumberFormatException("Minutes cannot be negative");
-                    } catch (NumberFormatException e) {
-                        showAlert(Alert.AlertType.ERROR, "Invalid Minutes",
-                                "Please enter a valid positive number for minutes.");
+                    if (hours < 0 || minutes < 0) {
+                        showAlert(Alert.AlertType.ERROR, "Invalid Input",
+                                "Hours and minutes must be positive.");
                         return null;
                     }
 
@@ -573,87 +485,67 @@ public class LogEditorController {
             return null;
         });
 
-        // Show the dialog and process the result
         Optional<RegistroTrabalho> result = dialog.showAndWait();
 
         result.ifPresent(updatedEntry -> {
-            // Find the original entry index and replace it
-            int index = registros.indexOf(entry);
-            if (index >= 0) {
-                registros.set(index, updatedEntry);
-
-                // Save immediately
-                try {
-                    FileLoader.salvarRegistros(AppConstants.WORKLOG_PATH, registros);
-
-                    // Get the new date
-                    LocalDate newDate = LocalDate.parse(updatedEntry.getData(),
-                            DateTimeFormatter.ofPattern("MM/dd/yyyy"));
-
-                    // Check if the date changed - FIXED: Corrected the boolean expression syntax
-                    boolean dateChanged = finalOriginalDate != null &&
-                            (newDate.getYear() != finalOriginalDate.getYear() ||
-                                    newDate.getMonthValue() != finalOriginalDate.getMonthValue());
-
-                    System.out.println("Date changed: " + dateChanged);
-                    System.out.println("Original date: " + finalOriginalDate);
-                    System.out.println("New date: " + newDate);
-
-                    // Update the table
-                    refreshLogTable();
-
-                    // If the date changed, use the filter callback
-                    if (dateChanged && onFilterCallback != null) {
-                        System.out.println("Using onFilterCallback to update filter to new date");
-                        onFilterCallback.accept(
-                                String.valueOf(newDate.getYear()),
-                                String.format("%02d", newDate.getMonthValue())
-                        );
-                    }
-                    // Otherwise use the standard callback
-                    else if (onSaveCallback != null) {
-                        System.out.println("Using onSaveCallback for regular update");
-                        onSaveCallback.run();
-                    }
-
-                    showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso",
-                            "✔ Log entry updated.\n✔ Registro atualizado.");
-                } catch (Exception e) {
-                    System.err.println("Error saving changes: " + e.getMessage());
-                    e.printStackTrace();
-                    showAlert(Alert.AlertType.ERROR, "Error / Erro",
-                            "Failed to save changes:\nFalha ao salvar alterações:\n" + e.getMessage());
+            try {
+                if (service != null) {
+                    service.updateWorkLog(entry, updatedEntry);
                 }
+
+                // Update local list
+                int index = registros.indexOf(entry);
+                if (index >= 0) {
+                    registros.set(index, updatedEntry);
+                }
+
+                // Get the new date
+                LocalDate newDate = DateUtils.parseDisplayDate(updatedEntry.getData());
+
+                // Check if the date changed
+                boolean dateChanged = finalOriginalDate != null &&
+                        (newDate.getYear() != finalOriginalDate.getYear() ||
+                                newDate.getMonthValue() != finalOriginalDate.getMonthValue());
+
+                System.out.println("Date changed: " + dateChanged);
+                System.out.println("Original date: " + finalOriginalDate);
+                System.out.println("New date: " + newDate);
+
+                // Update the table
+                refreshLogTable();
+
+                // If the date changed, use the filter callback
+                if (dateChanged && onFilterCallback != null) {
+                    System.out.println("Using onFilterCallback to update filter to new date");
+                    onFilterCallback.accept(
+                            String.valueOf(newDate.getYear()),
+                            String.format("%02d", newDate.getMonthValue())
+                    );
+                }
+                // Otherwise use the standard callback
+                else if (onSaveCallback != null) {
+                    System.out.println("Using onSaveCallback for regular update");
+                    onSaveCallback.run();
+                }
+
+                showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso",
+                        "✔ Log entry updated.\n✔ Registro atualizado.");
+            } catch (Exception e) {
+                ErrorHandler.handleUnexpectedError("updating log entry", e);
+                showAlert(Alert.AlertType.ERROR, "Error / Erro",
+                        "Failed to save changes:\nFalha ao salvar alterações:\n" + e.getMessage());
             }
         });
     }
 
-    private void saveAndRefreshLogs(String successMessage) {
-        try {
-            FileLoader.salvarRegistros(AppConstants.WORKLOG_PATH, registros);
-            refreshLogTable();
-            if (onSaveCallback != null) onSaveCallback.run();
-            showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso", successMessage);
-        } catch (Exception e) {
-            showAlert(Alert.AlertType.ERROR, "Error / Erro",
-                    "Failed to save changes:\nFalha ao salvar alterações:\n" + e.getMessage());
-        }
-    }
     @FXML
     public void onSave() {
         try {
-            // Save to file
-            FileLoader.salvarRegistros(AppConstants.WORKLOG_PATH, registros);
-
-            // Refresh the table
-            refreshLogTable();
-
-            // Call the callback to refresh filters in the main UI
+            // The service handles saving automatically, so just notify callback
             if (onSaveCallback != null) {
                 onSaveCallback.run();
             }
 
-            // Show success message
             showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso",
                     "✓ Changes saved successfully.\n✓ Alterações salvas com sucesso.");
         } catch (Exception e) {
@@ -661,11 +553,17 @@ public class LogEditorController {
                     "Failed to save changes:\nFalha ao salvar alterações:\n" + e.getMessage());
         }
     }
+
     private void showAlert(Alert.AlertType type, String title, String content) {
         Alert alert = new Alert(type);
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(content);
         alert.showAndWait();
+    }
+
+    // NEW: Getter method for service access
+    public CompanyManagerService getService() {
+        return service;
     }
 }

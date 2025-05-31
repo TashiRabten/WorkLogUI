@@ -397,5 +397,5 @@ public class CompanyManagerUI {
         String month = filterController.getSelectedMonth();
         String company = filterController.getSelectedCompany();
 
-        editor.show((Stage) openLogEditorBtn.getScene().getWindow(), year, month, company);
+        editor.show((Stage) openLogEditorBtn.getScene().getWindow(), year, month, company, service);
     }}
