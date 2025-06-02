@@ -130,8 +130,8 @@ public class WorkLogEntryController {
             valueField.clear();
             doublePayCheckBox.setSelected(false);
 
-            // Check for warnings
-            String warning = WarningUtils.generateCurrentMonthWarning(service.getRegistros());
+            // Check for warnings - PASS THE SERVICE INSTANCE
+            String warning = WarningUtils.generateCurrentMonthWarning(service.getRegistros(), service);
             if (warning != null) {
                 setStatusMessage("✔ Work logged successfully.\n✔ Entrada registrada com sucesso.");
                 setWarningMessage(warning);

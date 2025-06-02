@@ -4,6 +4,7 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
+import javafx.scene.layout.Region;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
 
@@ -26,8 +27,8 @@ public class WarningUtils {
         if (monthlyNESE < sgaLimit * 0.9) {
             return null; // No warning
         } else if (monthlyNESE < sgaLimit) {
-            return String.format("✅ Your NESE (Net Earnings from Self-Employment) is approaching (%s) the %s monthly SGA limit.\n" +
-                            "✅ Seu NESE (Ganhos Líquidos de Trabalho Autônomo) está se aproximando (%s) do limite SGA mensal de %s.",
+            return String.format("✅ Your NESE is approaching (%s) the %s monthly SGA limit.\n" +
+                            "✅ Seu NESE está se aproximando (%s) do limite SGA mensal de %s.",
                     formatted, limitStr, formatted, limitStr);
         } else if (Math.abs(monthlyNESE - sgaLimit) < 0.01) {
             return String.format("🎯 Your NESE is exactly (%s) at the %s monthly SGA limit.\n" +
@@ -118,10 +119,8 @@ public class WarningUtils {
         String warning = generateFilteredWarning(registros, selectedYear, selectedMonth);
         if (warning == null) return false;
 
-        // Only show popups for more serious warnings (over 10% of limit)
-        if (!warning.contains("over 10%") && !warning.contains("over 20%") && !warning.contains("over 30%")) {
-            return false;
-        }
+        // FIXED: Show popup for ALL warnings (removed the filtering)
+        // Original code only showed popups for "over 10%" warnings, now shows all
 
         // Set alert type based on severity
         AlertType alertType = warning.contains("🚨") ? AlertType.ERROR : AlertType.WARNING;
@@ -158,9 +157,9 @@ public class WarningUtils {
                 label.setWrapText(true);
                 alert.getDialogPane().setContent(label);
 
-                // Make the dialog wider to accommodate the message
-                alert.getDialogPane().setMinWidth(480);
-                alert.getDialogPane().setPrefWidth(480);
+                alert.getDialogPane().autosize();
+                label.setMaxWidth(Region.USE_COMPUTED_SIZE);
+                label.setPrefWidth(Region.USE_COMPUTED_SIZE);
 
                 // Get the stage to customize further if needed
                 Stage stage = (Stage) alert.getDialogPane().getScene().getWindow();
@@ -176,13 +175,20 @@ public class WarningUtils {
         }
     }
 
-    // In WarningUtils.java - Replace these two methods:
-
+    // Fixed methods to properly use the service parameter
     public static String generateCurrentMonthWarning(List<RegistroTrabalho> registros) {
-        return generateCurrentMonthWarning(registros, null);
+        // Try to get an instance from the current context, or create a new one
+        try {
+            CompanyManagerService service = new CompanyManagerService();
+            service.initialize();
+            return generateCurrentMonthWarning(registros, service);
+        } catch (Exception e) {
+            System.err.println("Failed to initialize service for warning generation: " + e.getMessage());
+            return null;
+        }
     }
 
-    // NEW: Overloaded method that accepts service parameter
+    // NEW: Overloaded method that accepts service parameter - this is the main implementation
     public static String generateCurrentMonthWarning(List<RegistroTrabalho> registros, CompanyManagerService service) {
         LocalDate now = LocalDate.now();
         int currentYear = now.getYear();
@@ -191,10 +197,10 @@ public class WarningUtils {
         double sgaLimit = AGICalculator.getSGALimit(currentYear);
 
         try {
-            // Use provided service or create new one
+            // Use the provided service - this is crucial for proper operation
             if (service == null) {
-                service = new CompanyManagerService();
-                service.initialize();
+                System.err.println("Service is null, cannot generate warning");
+                return null;
             }
 
             // Get bills for current month
@@ -221,16 +227,25 @@ public class WarningUtils {
             return generateWarningMessage(monthlyNESE, sgaLimit, "Current month");
         } catch (Exception e) {
             // Fall back to gross income calculation if something fails
+            System.err.println("Error generating current month warning: " + e.getMessage());
             e.printStackTrace();
             return null;
         }
     }
 
     public static String generateFilteredWarning(List<RegistroTrabalho> registros, String selectedYear, String selectedMonth) {
-        return generateFilteredWarning(registros, selectedYear, selectedMonth, null);
+        // Try to get an instance from the current context, or create a new one
+        try {
+            CompanyManagerService service = new CompanyManagerService();
+            service.initialize();
+            return generateFilteredWarning(registros, selectedYear, selectedMonth, service);
+        } catch (Exception e) {
+            System.err.println("Failed to initialize service for filtered warning generation: " + e.getMessage());
+            return null;
+        }
     }
 
-    // NEW: Overloaded method that accepts service parameter
+    // NEW: Overloaded method that accepts service parameter - this is the main implementation
     public static String generateFilteredWarning(List<RegistroTrabalho> registros, String selectedYear,
                                                  String selectedMonth, CompanyManagerService service) {
         // If "All" is selected for either year or month, we can't show a meaningful warning
@@ -243,10 +258,10 @@ public class WarningUtils {
         double sgaLimit = AGICalculator.getSGALimit(year);
 
         try {
-            // Use provided service or create new one
+            // Use the provided service - this is crucial for proper operation
             if (service == null) {
-                service = new CompanyManagerService();
-                service.initialize();
+                System.err.println("Service is null, cannot generate filtered warning");
+                return null;
             }
 
             String yearMonth = String.format("%d-%02d", year, month);
@@ -272,6 +287,7 @@ public class WarningUtils {
             String context = String.format("%02d/%d", month, year);
             return generateWarningMessage(monthlyNESE, sgaLimit, context);
         } catch (Exception e) {
+            System.err.println("Error generating filtered warning: " + e.getMessage());
             e.printStackTrace();
             return null;
         }

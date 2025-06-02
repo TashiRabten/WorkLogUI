@@ -94,8 +94,8 @@
             <ComboBox fx:id="monthFilter" prefWidth="100"/>
             <Label text="Company:"/>
             <ComboBox fx:id="companyFilter" prefWidth="150"/>
-            <Button fx:id="applyFilterBtn" text="Apply Filter / Aplicar Filtro" onAction="#onApplyFilter"/>
-            <Button fx:id="clearFilterBtn" text="Clear Filter / Limpar Filtro" onAction="#onClearFilter"/>
+            <Button fx:id="applyFilterBtn" text="Apply Filter" onAction="#onApplyFilter"/>
+            <Button fx:id="clearFilterBtn" text="Clear Filter" onAction="#onClearFilter"/>
             <Button fx:id="editBillsBtn" text="💸 Edit Bills" onAction="#onEditBills"/>
         </HBox>
     </VBox>
