@@ -100,55 +100,75 @@ public class BillsManager {
      * Edit all bills matching the filter criteria
      */
     private void editAllFilteredBills(Stage parentStage, String year, String month, String company) {
-        // Get all bills and filter based on dropdown selections
+        List<Bill> allBills = collectFilteredBills(year, month, company);
+        String title = buildDialogTitle(year, month);
+        
+        new BillsEditorUI("Multiple", allBills, service,
+                parentStage, this::filterToEditedBill).show();
+    }
+
+    private List<Bill> collectFilteredBills(String year, String month, String company) {
         List<Bill> allBills = new ArrayList<>();
         Map<String, List<String>> yearToMonthsMap = buildYearToMonthsMap();
+        List<String> yearsToInclude = determineYearsToInclude(year, yearToMonthsMap);
 
-        // Determine which years to include
+        for (String y : yearsToInclude) {
+            List<String> monthsToInclude = determineMonthsToInclude(month, y, yearToMonthsMap);
+            collectBillsForYearMonths(y, monthsToInclude, company, allBills);
+        }
+        
+        return allBills;
+    }
+
+    private List<String> determineYearsToInclude(String year, Map<String, List<String>> yearToMonthsMap) {
         List<String> yearsToInclude = new ArrayList<>();
         if ("All".equals(year)) {
             yearsToInclude.addAll(yearToMonthsMap.keySet());
         } else {
             yearsToInclude.add(year);
         }
+        return yearsToInclude;
+    }
 
-        // Loop through years and months
-        for (String y : yearsToInclude) {
-            List<String> monthsToInclude;
-            if ("All".equals(month)) {
-                monthsToInclude = yearToMonthsMap.getOrDefault(y, Collections.emptyList());
-            } else {
-                monthsToInclude = new ArrayList<>();
-                if (yearToMonthsMap.getOrDefault(y, Collections.emptyList()).contains(month)) {
-                    monthsToInclude.add(month);
-                }
+    private List<String> determineMonthsToInclude(String month, String year, Map<String, List<String>> yearToMonthsMap) {
+        if ("All".equals(month)) {
+            return yearToMonthsMap.getOrDefault(year, Collections.emptyList());
+        } else {
+            List<String> monthsToInclude = new ArrayList<>();
+            if (yearToMonthsMap.getOrDefault(year, Collections.emptyList()).contains(month)) {
+                monthsToInclude.add(month);
             }
+            return monthsToInclude;
+        }
+    }
 
-            for (String m : monthsToInclude) {
-                String ym = y + "-" + m;
-                List<Bill> monthBills = service.getBillsForMonth(ym);
+    private void collectBillsForYearMonths(String year, List<String> months, String company, List<Bill> allBills) {
+        for (String month : months) {
+            String yearMonth = year + "-" + month;
+            List<Bill> monthBills = service.getBillsForMonth(yearMonth);
+            List<Bill> filteredBills = applyCompanyFilter(monthBills, company);
+            allBills.addAll(filteredBills);
+        }
+    }
 
-                // Apply company filter if needed
-                if (!"All".equals(company)) {
-                    List<Bill> filteredBills = new ArrayList<>();
-                    for (Bill b : monthBills) {
-                        if (company.equals(b.getLabel())) {
-                            filteredBills.add(b);
-                        }
-                    }
-                    monthBills = filteredBills;
-                }
-
-                allBills.addAll(monthBills);
+    private List<Bill> applyCompanyFilter(List<Bill> bills, String company) {
+        if ("All".equals(company)) {
+            return bills;
+        }
+        
+        List<Bill> filteredBills = new ArrayList<>();
+        for (Bill bill : bills) {
+            if (company.equals(bill.getLabel())) {
+                filteredBills.add(bill);
             }
         }
+        return filteredBills;
+    }
 
+    private String buildDialogTitle(String year, String month) {
         String title = "All".equals(year) ? "All Years" : "Year: " + year;
         title += "All".equals(month) ? ", All Months" : ", Month: " + month;
-
-        // Use the constructor that takes a BiConsumer
-        new BillsEditorUI("Multiple", allBills, service,
-                parentStage, this::filterToEditedBill).show();
+        return title;
     }
 
 

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 public class DataMigrationUtility {
 
@@ -51,47 +52,77 @@ public class DataMigrationUtility {
      */
     public static void migrateBillsToCategories(CompanyManagerService service) {
         System.out.println("🔄 Migrating bills to category system...");
-
+        
         service.clearBillCache();
-
-        // Get all bills from all months
         var allBills = service.getAllBills();
-        int migratedCount = 0;
+        int migratedCount = processBillMigration(service, allBills);
+        
+        System.out.println("✅ Migrated " + migratedCount + " bills to category system.");
+    }
 
+    private static int processBillMigration(CompanyManagerService service, Map<String, List<Bill>> allBills) {
+        int migratedCount = 0;
+        
         for (var entry : allBills.entrySet()) {
             String yearMonth = entry.getKey();
             List<Bill> bills = entry.getValue();
-            boolean needsUpdate = false;
-
-            for (Bill bill : bills) {
-                // This will already be initialized by FileLoader, but let's be sure
-                if (bill.getCategory() == null || bill.getCategory() == ExpenseCategory.NONE) {
-                    bill.initializeCategory();
-
-                    // If still NONE after initialization, try to auto-categorize
-                    if (bill.getCategory() == ExpenseCategory.NONE || bill.getCategory() == ExpenseCategory.OTHER_DEDUCTIBLE) {
-                        ExpenseCategory autoCategory = autoCategorizeBill(bill.getDescription());
-                        bill.setCategory(autoCategory);
-                    }
-
-                    needsUpdate = true;
-                    migratedCount++;
-                    System.out.println("  Migrated: " + bill.getDescription() + " -> " + bill.getCategory());
-                }
-            }
-
-            // Save updated bills
-            if (needsUpdate) {
-                try {
-                    service.setBillsForMonth(yearMonth, bills);
-                    System.out.println("  ✅ Updated " + yearMonth);
-                } catch (Exception e) {
-                    System.err.println("  ❌ Failed to update " + yearMonth + ": " + e.getMessage());
-                }
+            
+            MigrationResult result = migrateBillsForMonth(bills);
+            if (result.needsUpdate) {
+                saveMigratedBills(service, yearMonth, bills);
+                migratedCount += result.migratedCount;
             }
         }
+        
+        return migratedCount;
+    }
 
-        System.out.println("✅ Migrated " + migratedCount + " bills to category system.");
+    private static MigrationResult migrateBillsForMonth(List<Bill> bills) {
+        boolean needsUpdate = false;
+        int migratedCount = 0;
+        
+        for (Bill bill : bills) {
+            if (requiresMigration(bill)) {
+                migrateSingleBill(bill);
+                needsUpdate = true;
+                migratedCount++;
+                System.out.println("  Migrated: " + bill.getDescription() + " -> " + bill.getCategory());
+            }
+        }
+        
+        return new MigrationResult(needsUpdate, migratedCount);
+    }
+
+    private static boolean requiresMigration(Bill bill) {
+        return bill.getCategory() == null || bill.getCategory() == ExpenseCategory.NONE;
+    }
+
+    private static void migrateSingleBill(Bill bill) {
+        bill.initializeCategory();
+        
+        if (bill.getCategory() == ExpenseCategory.NONE || bill.getCategory() == ExpenseCategory.OTHER_DEDUCTIBLE) {
+            ExpenseCategory autoCategory = autoCategorizeBill(bill.getDescription());
+            bill.setCategory(autoCategory);
+        }
+    }
+
+    private static void saveMigratedBills(CompanyManagerService service, String yearMonth, List<Bill> bills) {
+        try {
+            service.setBillsForMonth(yearMonth, bills);
+            System.out.println("  ✅ Updated " + yearMonth);
+        } catch (Exception e) {
+            System.err.println("  ❌ Failed to update " + yearMonth + ": " + e.getMessage());
+        }
+    }
+
+    private static class MigrationResult {
+        final boolean needsUpdate;
+        final int migratedCount;
+        
+        MigrationResult(boolean needsUpdate, int migratedCount) {
+            this.needsUpdate = needsUpdate;
+            this.migratedCount = migratedCount;
+        }
     }
 
     /**

@@ -486,9 +486,19 @@ public class BillsEditorUI {
         alert.showAndWait();
     }
     private void setupTableColumns() {
-        // Clear any existing columns to prevent duplicates
         billsTable.getColumns().clear();
         
+        TableColumn<Bill, LocalDate> dateCol = createDateColumn();
+        TableColumn<Bill, String> descCol = createDescriptionColumn();
+        TableColumn<Bill, Double> amountCol = createAmountColumn();
+        TableColumn<Bill, Boolean> paidCol = createPaidColumn();
+        TableColumn<Bill, ExpenseCategory> categoryCol = createCategoryColumn();
+
+        billsTable.getColumns().addAll(dateCol, descCol, amountCol, paidCol, categoryCol);
+        billsTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+    }
+
+    private TableColumn<Bill, LocalDate> createDateColumn() {
         TableColumn<Bill, LocalDate> dateCol = new TableColumn<>("Date");
         dateCol.setCellValueFactory(cell -> new javafx.beans.property.SimpleObjectProperty<>(cell.getValue().getDate()));
         dateCol.setCellFactory(col -> new TableCell<>() {
@@ -499,11 +509,17 @@ public class BillsEditorUI {
             }
         });
         dateCol.setPrefWidth(100);
+        return dateCol;
+    }
 
+    private TableColumn<Bill, String> createDescriptionColumn() {
         TableColumn<Bill, String> descCol = new TableColumn<>("Description");
         descCol.setCellValueFactory(cell -> new javafx.beans.property.SimpleStringProperty(cell.getValue().getDescription()));
         descCol.setPrefWidth(200);
+        return descCol;
+    }
 
+    private TableColumn<Bill, Double> createAmountColumn() {
         TableColumn<Bill, Double> amountCol = new TableColumn<>("Amount");
         amountCol.setCellValueFactory(cell -> new javafx.beans.property.SimpleObjectProperty<>(cell.getValue().getAmount()));
         amountCol.setCellFactory(col -> new TableCell<>() {
@@ -514,7 +530,10 @@ public class BillsEditorUI {
             }
         });
         amountCol.setPrefWidth(100);
+        return amountCol;
+    }
 
+    private TableColumn<Bill, Boolean> createPaidColumn() {
         TableColumn<Bill, Boolean> paidCol = new TableColumn<>("Paid");
         paidCol.setCellValueFactory(cell -> new javafx.beans.property.SimpleObjectProperty<>(cell.getValue().isPaid()));
         paidCol.setCellFactory(col -> new TableCell<>() {
@@ -533,8 +552,10 @@ public class BillsEditorUI {
             }
         });
         paidCol.setPrefWidth(50);
+        return paidCol;
+    }
 
-        // Update category column
+    private TableColumn<Bill, ExpenseCategory> createCategoryColumn() {
         TableColumn<Bill, ExpenseCategory> categoryCol = new TableColumn<>("Category");
         categoryCol.setCellValueFactory(cell -> new javafx.beans.property.SimpleObjectProperty<>(cell.getValue().getCategory()));
         categoryCol.setCellFactory(col -> new TableCell<>() {
@@ -546,19 +567,12 @@ public class BillsEditorUI {
                     setStyle("");
                 } else {
                     setText(category.getDisplayName());
-                    // Color code based on deductibility
-                    if (category.isDeductible()) {
-                        setStyle("-fx-text-fill: green;");
-                    } else {
-                        setStyle("-fx-text-fill: red;");
-                    }
+                    setStyle(category.isDeductible() ? "-fx-text-fill: green;" : "-fx-text-fill: red;");
                 }
             }
         });
         categoryCol.setPrefWidth(150);
-
-        billsTable.getColumns().addAll(dateCol, descCol, amountCol, paidCol, categoryCol);
-        billsTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        return categoryCol;
     }
 
 }

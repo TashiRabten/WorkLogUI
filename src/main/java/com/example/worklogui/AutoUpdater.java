@@ -69,73 +69,132 @@ public class AutoUpdater {
 
         task.setOnSucceeded(e -> {
             JSONObject latest = task.getValue();
-            if (latest != null) {
-                String tagName = latest.getString("tag_name");
-                String latestVersion = tagName.startsWith("v.") ? tagName.replace("v.", "") :
-                        tagName.startsWith("v") ? tagName.replace("v", "") : tagName;
-
-                if (isNewerVersion(latestVersion, CURRENT_VERSION)) {
-                    Platform.runLater(() -> showUpdateDialog(latest));
-                } else if (manualCheck) {
-                    showAlert(Alert.AlertType.INFORMATION, "No Updates", "✔ App is up-to-date\n✔ Aplicativo está atualizado");
-                }
-            }
-            manualCheck = false;
+            handleUpdateCheckSuccess(latest);
         });
 
         task.setOnFailed(e -> {
             Throwable ex = task.getException();
-            if (manualCheck) {
-                showAlert(Alert.AlertType.ERROR, "Update Failed",
-                        "❌ Connection to Update Failed:\n" + ex.getMessage() +
-                                "\n❌ Conexão de Atualização Falhou:\n" + ex.getMessage());
-            } else {
-                System.err.println("⚠️ Auto-update check failed: " + ex.getMessage());
-            }
-            manualCheck = false;
+            handleUpdateCheckFailure(ex);
         });
 
         executor.submit(task);
     }
 
+    private static void handleUpdateCheckSuccess(JSONObject latest) {
+        if (latest != null) {
+            String latestVersion = extractVersionFromTag(latest.getString("tag_name"));
+            
+            if (isNewerVersion(latestVersion, CURRENT_VERSION)) {
+                Platform.runLater(() -> showUpdateDialog(latest));
+            } else if (manualCheck) {
+                showAlert(Alert.AlertType.INFORMATION, "No Updates", "✔ App is up-to-date\n✔ Aplicativo está atualizado");
+            }
+        }
+        manualCheck = false;
+    }
+
+    private static String extractVersionFromTag(String tagName) {
+        if (tagName.startsWith("v.")) {
+            return tagName.replace("v.", "");
+        } else if (tagName.startsWith("v")) {
+            return tagName.replace("v", "");
+        } else {
+            return tagName;
+        }
+    }
+
+    private static void handleUpdateCheckFailure(Throwable ex) {
+        if (manualCheck) {
+            showAlert(Alert.AlertType.ERROR, "Update Failed",
+                    "❌ Connection to Update Failed:\n" + ex.getMessage() +
+                            "\n❌ Conexão de Atualização Falhou:\n" + ex.getMessage());
+        } else {
+            System.err.println("⚠️ Auto-update check failed: " + ex.getMessage());
+        }
+        manualCheck = false;
+    }
+
     private static void showUpdateDialog(JSONObject release) {
         String tagName = release.optString("tag_name");
-        String latestVersion = tagName.startsWith("v.") ? tagName.replace("v.", "") :
-                tagName.startsWith("v") ? tagName.replace("v", "") : tagName;
-        latestVersion = latestVersion.trim();
-
+        String latestVersion = extractVersionFromTag(tagName).trim();
         String url = findInstallerUrl(release);
         String htmlUrl = release.optString("html_url", "https://github.com/TashiRabten/WorkLogUI/releases");
 
+        if (!validateUpdateData(latestVersion, url)) {
+            return;
+        }
+
+        createAndShowUpdateDialog(release, latestVersion, url, htmlUrl);
+    }
+
+    private static boolean validateUpdateData(String latestVersion, String url) {
         if (latestVersion.isEmpty()) {
             System.err.println("❌ No tag_name found. \n❌ Não encontrou 'tag' de versão.");
-            return;
+            return false;
         }
 
         if (url == null) {
             showAlert(Alert.AlertType.ERROR,
                     "Installer Not Found / Instalador não encontrado",
                     "Release does not contain .exe, .dmg or .pkg\nLançamento não contém arquivo .exe, .dmg ou .pkg");
-            return;
+            return false;
         }
+        return true;
+    }
 
+    private static void createAndShowUpdateDialog(JSONObject release, String latestVersion, String url, String htmlUrl) {
+
+        Stage stage = createUpdateStage();
+        VBox root = createMainLayout();
+        
+        Label title = createTitleLabel(latestVersion);
+        String releaseNotes = extractReleaseNotes(release);
+        Hyperlink releaseLink = createReleaseLink(htmlUrl);
+        TextArea notes = createNotesArea(releaseNotes);
+        
+        ProgressBar bar = new ProgressBar(0);
+        bar.setVisible(false);
+        Label progress = new Label("");
+        progress.setVisible(false);
+        
+        Button download = new Button("💾 Download & Install / Baixar e Instalar");
+        Button cancel = new Button("❌ Cancel / Cancelar");
+        HBox buttons = createButtonLayout(download, cancel);
+
+        setupDownloadAction(download, bar, progress, stage, url);
+
+        cancel.setOnAction(e -> stage.close());
+        
+        setupStageAndShow(stage, root, title, notes, releaseLink, bar, progress, buttons);
+    }
+
+    private static Stage createUpdateStage() {
         Stage stage = new Stage();
         stage.initModality(Modality.APPLICATION_MODAL);
         stage.setTitle("Update Available / Atualização Disponível");
+        return stage;
+    }
 
+    private static VBox createMainLayout() {
         VBox root = new VBox(10);
         root.setPadding(new Insets(20));
         root.setAlignment(Pos.CENTER);
+        return root;
+    }
 
-        Label title = new Label("🔄 A new version (" + latestVersion + ") is available!\n🔄 Uma nova versão (" + latestVersion + ") está disponível!");
+    private static Label createTitleLabel(String latestVersion) {
+        return new Label("🔄 A new version (" + latestVersion + ") is available!\n🔄 Uma nova versão (" + latestVersion + ") está disponível!");
+    }
 
-        String releaseNotes;
+    private static String extractReleaseNotes(JSONObject release) {
         try {
-            releaseNotes = release.getString("body");
+            return release.getString("body");
         } catch (Exception ex) {
-            releaseNotes = "No release notes available / Notas de lançamento não disponíveis";
+            return "No release notes available / Notas de lançamento não disponíveis";
         }
+    }
 
+    private static Hyperlink createReleaseLink(String htmlUrl) {
         Hyperlink releaseLink = new Hyperlink("🔗 Link to manual / Link para o Manual");
         releaseLink.setOnAction(e -> {
             try {
@@ -144,85 +203,93 @@ public class AutoUpdater {
                 showAlert(Alert.AlertType.ERROR, "Error", "Failed to open browser\nFalha ao abrir o navegador");
             }
         });
+        return releaseLink;
+    }
 
+    private static TextArea createNotesArea(String releaseNotes) {
         TextArea notes = new TextArea(releaseNotes);
         notes.setEditable(false);
         notes.setWrapText(true);
         notes.setPrefHeight(200);
+        return notes;
+    }
 
-        ProgressBar bar = new ProgressBar(0);
-        bar.setVisible(false);
-        Label progress = new Label("");
-        progress.setVisible(false);
-
-        Button download = new Button("💾 Download & Install / Baixar e Instalar");
-        Button cancel = new Button("❌ Cancel / Cancelar");
-
+    private static HBox createButtonLayout(Button download, Button cancel) {
         HBox buttons = new HBox(10, download, cancel);
         buttons.setAlignment(Pos.CENTER);
+        return buttons;
+    }
 
+    private static void setupDownloadAction(Button download, ProgressBar bar, Label progress, Stage stage, String url) {
         download.setOnAction(e -> {
             bar.setVisible(true);
             progress.setVisible(true);
             download.setDisable(true);
 
-            Task<Void> installTask = new Task<>() {
-                @Override
-                protected Void call() throws Exception {
-                    updateMessage("⬇ Downloading installer...\n⬇ Baixando instalador...");
-
-                    Path tempDir = Files.createTempDirectory("worklog-update");
-                    String fileName = url.substring(url.lastIndexOf('/') + 1);
-                    Path tempOutput = tempDir.resolve(fileName);
-
-                    try (InputStream in = new URL(url).openStream()) {
-                        Files.copy(in, tempOutput, StandardCopyOption.REPLACE_EXISTING);
-                    }
-
-                    Path installerFolder = AppConstants.EXPORT_FOLDER.getParent().resolve("installer");
-                    Files.createDirectories(installerFolder);
-                    Path userDownloads = installerFolder.resolve(fileName);                    Files.createDirectories(AppConstants.EXPORT_FOLDER);
-                    Files.copy(tempOutput, userDownloads, StandardCopyOption.REPLACE_EXISTING);
-                    Files.deleteIfExists(tempOutput);
-
-                    updateMessage("🚀 Opening installer...\nAbrindo instalador...");
-                    try {
-                        Desktop.getDesktop().open(userDownloads.toFile());
-                        updateMessage("✅ Installer launched. Closing app...\n✅ Instalador iniciado. Fechando o aplicativo...");
-
-                        // Give user a second before shutdown
-                        Thread.sleep(1500);
-
-                        // Force close
-                        Platform.exit();
-                        System.exit(0);
-
-                    } catch (Exception ex) {
-                        updateMessage("❗ Could not open installer automatically.\n❗ Não foi possível abrir o instalador automaticamente.");
-                    }
-                    return null;
-                }
-            };
-
-
-            bar.progressProperty().bind(installTask.progressProperty());
-            progress.textProperty().bind(installTask.messageProperty());
-
-            installTask.setOnSucceeded(ev -> stage.close());
-            installTask.setOnFailed(ev -> {
-                Throwable ex = installTask.getException();
-                progress.textProperty().unbind();
-                progress.setText("❌ Error: " + ex.getMessage() + "\n❌ Erro: " + ex.getMessage());
-                download.setDisable(false);
-            });
-
+            Task<Void> installTask = createInstallTask(url);
+            bindTaskToUI(installTask, bar, progress);
+            setupTaskCallbacks(installTask, stage, progress, download);
             executor.submit(installTask);
         });
+    }
 
-        cancel.setOnAction(e -> stage.close());
+    private static Task<Void> createInstallTask(String url) {
+        return new Task<>() {
+            @Override
+            protected Void call() throws Exception {
+                updateMessage("⬇ Downloading installer...\n⬇ Baixando instalador...");
+                
+                Path tempDir = Files.createTempDirectory("worklog-update");
+                String fileName = url.substring(url.lastIndexOf('/') + 1);
+                Path tempOutput = tempDir.resolve(fileName);
 
+                try (InputStream in = new URL(url).openStream()) {
+                    Files.copy(in, tempOutput, StandardCopyOption.REPLACE_EXISTING);
+                }
+
+                Path installerFolder = AppConstants.EXPORT_FOLDER.getParent().resolve("installer");
+                Files.createDirectories(installerFolder);
+                Path userDownloads = installerFolder.resolve(fileName);
+                Files.createDirectories(AppConstants.EXPORT_FOLDER);
+                Files.copy(tempOutput, userDownloads, StandardCopyOption.REPLACE_EXISTING);
+                Files.deleteIfExists(tempOutput);
+
+                updateMessage("🚀 Opening installer...\nAbrindo instalador...");
+                try {
+                    Desktop.getDesktop().open(userDownloads.toFile());
+                    updateMessage("✅ Installer launched. Closing app...\n✅ Instalador iniciado. Fechando o aplicativo...");
+                    
+                    Thread.sleep(1500); // Give user a second before shutdown
+                    Platform.exit();
+                    System.exit(0);
+                } catch (Exception ex) {
+                    updateMessage("❗ Could not open installer automatically.\n❗ Não foi possível abrir o instalador automaticamente.");
+                }
+                return null;
+            }
+        };
+    }
+
+    private static void bindTaskToUI(Task<Void> installTask, ProgressBar bar, Label progress) {
+        bar.progressProperty().bind(installTask.progressProperty());
+        progress.textProperty().bind(installTask.messageProperty());
+    }
+
+    private static void setupTaskCallbacks(Task<Void> installTask, Stage stage, Label progress, Button download) {
+        installTask.setOnSucceeded(ev -> stage.close());
+        installTask.setOnFailed(ev -> {
+            Throwable ex = installTask.getException();
+            progress.textProperty().unbind();
+            progress.setText("❌ Error: " + ex.getMessage() + "\n❌ Erro: " + ex.getMessage());
+            download.setDisable(false);
+        });
+    }
+
+    private static void setupStageAndShow(Stage stage, VBox root, Label title, TextArea notes, 
+                                         Hyperlink releaseLink, ProgressBar bar, Label progress, HBox buttons) {
         root.getChildren().addAll(title, notes, releaseLink, bar, progress, buttons);
         stage.setScene(new Scene(root, 500, 450));
+        
         InputStream iconStream = AutoUpdater.class.getResourceAsStream("/icons/WorkLog.jpg");
         if (iconStream != null) {
             stage.getIcons().add(new Image(iconStream));
