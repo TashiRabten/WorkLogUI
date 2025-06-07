@@ -1,0 +1,28 @@
+# Default ignored files
+/shelf/
+/.idea/workspace.xml
+# Editor-based HTTP Client requests
+/httpRequests/
+# Datasource local storage ignored files
+/dataSources/
+/dataSources.local.xml
+target/
+.idea/
+*.class
+*.jar
+*.exe
+*.log
+*.json
+*.jpg
+*.ico
+Icons/
+UUID.txt
+worklog.json
+company-rates.json
+WorkLogUI.iml
+.codacy-claude-config
+# Codacy analysis files
+codacy_results.json*
+claude_codacy_analysis.md
+claude_review.md.codacy
+CODACY_FIXES_PROGRESS.md
