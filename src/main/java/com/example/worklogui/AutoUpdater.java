@@ -23,11 +23,15 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.file.*;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class AutoUpdater {
+
+
+
     private static boolean manualCheck = false;
     private static final String CURRENT_VERSION = getCurrentVersion();
     private static final String GITHUB_RELEASES_API = "https://api.github.com/repos/TashiRabten/WorkLogUI/releases";
@@ -101,7 +105,7 @@ public class AutoUpdater {
         latestVersion = latestVersion.trim();
 
         String url = findInstallerUrl(release);
-        String htmlUrl = release.optString("html_url", "https://github.com/TashiRabten/MantraCountUI/releases");
+        String htmlUrl = release.optString("html_url", "https://github.com/TashiRabten/WorkLogUI/releases");
 
         if (latestVersion.isEmpty()) {
             System.err.println("❌ No tag_name found. \n❌ Não encontrou 'tag' de versão.");
@@ -165,7 +169,7 @@ public class AutoUpdater {
             Task<Void> installTask = new Task<>() {
                 @Override
                 protected Void call() throws Exception {
-                    updateMessage("⬇️ Downloading installer...\n⬇️ Baixando instalador...");
+                    updateMessage("⬇ Downloading installer...\n⬇ Baixando instalador...");
 
                     Path tempDir = Files.createTempDirectory("worklog-update");
                     String fileName = url.substring(url.lastIndexOf('/') + 1);
@@ -175,20 +179,31 @@ public class AutoUpdater {
                         Files.copy(in, tempOutput, StandardCopyOption.REPLACE_EXISTING);
                     }
 
-                    Path userDownloads = Paths.get(System.getProperty("user.home"), "Downloads", fileName);
+                    Path installerFolder = AppConstants.EXPORT_FOLDER.getParent().resolve("installer");
+                    Files.createDirectories(installerFolder);
+                    Path userDownloads = installerFolder.resolve(fileName);                    Files.createDirectories(AppConstants.EXPORT_FOLDER);
                     Files.copy(tempOutput, userDownloads, StandardCopyOption.REPLACE_EXISTING);
                     Files.deleteIfExists(tempOutput);
 
                     updateMessage("🚀 Opening installer...\nAbrindo instalador...");
                     try {
                         Desktop.getDesktop().open(userDownloads.toFile());
-                        updateMessage("✅ Installer launched. Close this app to continue.\n✅ Instalador iniciado. Feche este aplicativo para continuar.");
+                        updateMessage("✅ Installer launched. Closing app...\n✅ Instalador iniciado. Fechando o aplicativo...");
+
+                        // Give user a second before shutdown
+                        Thread.sleep(1500);
+
+                        // Force close
+                        Platform.exit();
+                        System.exit(0);
+
                     } catch (Exception ex) {
                         updateMessage("❗ Could not open installer automatically.\n❗ Não foi possível abrir o instalador automaticamente.");
                     }
                     return null;
                 }
             };
+
 
             bar.progressProperty().bind(installTask.progressProperty());
             progress.textProperty().bind(installTask.messageProperty());
@@ -208,32 +223,65 @@ public class AutoUpdater {
 
         root.getChildren().addAll(title, notes, releaseLink, bar, progress, buttons);
         stage.setScene(new Scene(root, 500, 450));
-        stage.getIcons().add(new Image(AutoUpdater.class.getResourceAsStream("/icons/BUDA.jpg")));
+        InputStream iconStream = AutoUpdater.class.getResourceAsStream("/icons/WorkLog.jpg");
+        if (iconStream != null) {
+            stage.getIcons().add(new Image(iconStream));
+        } else {
+            System.err.println("⚠ Icon /icons/WorkLog.jpg not found");
+        }
         stage.show();
     }
 
     private static String findInstallerUrl(JSONObject release) {
         JSONArray assets = release.getJSONArray("assets");
-        boolean isMac = System.getProperty("os.name").toLowerCase().contains("mac");
-        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
-
+        OSPlatform platform = detectPlatform();
+        
         String fallbackUrl = null;
 
         for (int i = 0; i < assets.length(); i++) {
             JSONObject asset = assets.getJSONObject(i);
             String name = asset.getString("name").toLowerCase();
+            String downloadUrl = asset.getString("browser_download_url");
 
-            if (isMac && (name.endsWith(".pkg") || name.endsWith(".dmg"))) {
-                return asset.getString("browser_download_url");
+            if (isTargetPlatformAsset(name, platform)) {
+                return downloadUrl;
             }
-            if (isWindows && name.endsWith(".exe")) {
-                return asset.getString("browser_download_url");
-            }
-            if (fallbackUrl == null && (name.endsWith(".exe") || name.endsWith(".dmg") || name.endsWith(".pkg"))) {
-                fallbackUrl = asset.getString("browser_download_url");
+            
+            if (fallbackUrl == null && isInstallerAsset(name)) {
+                fallbackUrl = downloadUrl;
             }
         }
         return fallbackUrl;
+    }
+    
+    private static OSPlatform detectPlatform() {
+        String osName = System.getProperty("os.name").toLowerCase();
+        if (osName.contains("mac")) {
+            return OSPlatform.MAC;
+        } else if (osName.contains("win")) {
+            return OSPlatform.WINDOWS;
+        } else {
+            return OSPlatform.OTHER;
+        }
+    }
+    
+    private static boolean isTargetPlatformAsset(String name, OSPlatform platform) {
+        switch (platform) {
+            case MAC:
+                return name.endsWith(".pkg") || name.endsWith(".dmg");
+            case WINDOWS:
+                return name.endsWith(".exe");
+            default:
+                return false;
+        }
+    }
+    
+    private static boolean isInstallerAsset(String name) {
+        return name.endsWith(".exe") || name.endsWith(".dmg") || name.endsWith(".pkg");
+    }
+    
+    private enum OSPlatform {
+        MAC, WINDOWS, OTHER
     }
 
     private static String getCurrentVersion() {
@@ -253,7 +301,7 @@ public class AutoUpdater {
 
     private static boolean isNewerVersion(String latest, String current) {
         if (latest == null || latest.isBlank() || current == null || current.isBlank()) {
-            System.err.println("⚠️ Version string is blank. Skipping update check.");
+            System.err.println("⚠ Version string is blank. Skipping update check.");
             return false;
         }
 

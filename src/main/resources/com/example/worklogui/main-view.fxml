@@ -4,50 +4,100 @@
 <?import javafx.scene.layout.*?>
 <?import javafx.geometry.Insets?>
 
-<BorderPane xmlns:fx="http://javafx.com/fxml"
-            fx:controller="com.example.worklogui.CompanyManager">
 
-    <!-- Top bar: Date + Company + Edit -->
+<BorderPane xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.example.worklogui.CompanyManagerUI">
+
+<!-- Top bar: Date + Company + Edit -->
     <top>
-        <HBox spacing="10.0">
-            <padding>
-                <Insets top="10" right="10" bottom="10" left="10"/>
-            </padding>
-            <Label text="Date:"/>
-            <TextField fx:id="dateField" promptText="e.g. 05/01/2025"/>
-            <Label text="Company:"/>
-            <ComboBox fx:id="jobTypeCombo" prefWidth="150"/>
-            <Button fx:id="editCompaniesBtn" text="✎ Edit Companies" onAction="#handleEditCompanies"/>
-        </HBox>
+        <SplitPane orientation="VERTICAL">
+            <VBox maxHeight="50.0" minHeight="30.0" prefHeight="40.0">
+                <HBox spacing="10.0" alignment="CENTER_LEFT">
+                    <padding>
+                        <Insets top="5" right="10" bottom="5" left="10"/>
+                    </padding>
+                    <Label text="Date:"/>
+                    <DatePicker fx:id="dateField" promptText="MM/DD/YYYY"/>
+                    <Label text="Company:"/>
+                    <ComboBox fx:id="jobTypeCombo" prefWidth="150"/>
+                    <Button fx:id="editCompaniesBtn" text="✎ Edit Companies" onAction="#handleEditCompanies"/>
+                </HBox>
+            </VBox>
+        </SplitPane>
     </top>
 
-    <!-- Center: Time Input + Buttons + Result TextArea (in order) -->
-    <center>
-        <VBox spacing="10.0">
-            <padding>
-                <Insets top="10" right="10" bottom="10" left="10"/>
-            </padding>
 
-            <!-- Time input and double pay -->
-            <HBox spacing="10.0">
-                <Label fx:id="valueLabel" text="Time Worked:"/>
-                <TextField fx:id="valueField" promptText="e.g. 1.5"/>
-                <CheckBox fx:id="doublePayCheckBox" text="Double Pay"/>
-            </HBox>
+<!-- Center: Time Input + Buttons + TableView (in order) -->
+<center>
+    <VBox spacing="10.0">
+        <padding>
+            <Insets top="10" right="10" bottom="10" left="10"/>
+        </padding>
 
-            <!-- Action buttons -->
-            <HBox spacing="10.0">
-                <Button text="Log Work" onAction="#onLogWork"/>
-                <Button text="Show Totals" onAction="#onShowTotal"/>
-                <Button text="Show Earnings" onAction="#onShowEarnings"/>
-                <Button text="📊 Monthly/Yearly Summary" onAction="#onShowSummaryByMonthAndYear"/>
-                <Button text="📤 Export CSV" onAction="#onExportCsv"/>
-                <!-- Add this to your company-manager.fxml -->
-                <Button fx:id="openLogEditorBtn" text="📋 View/Edit Logs" onAction="#onOpenLogEditor" />
-            </HBox>
+        <!-- Time input and double pay -->
+        <HBox spacing="10.0" alignment="CENTER_LEFT">
+            <Label fx:id="valueLabel" text="Time Worked:"/>
+            <TextField fx:id="valueField" promptText="e.g. 1.5"/>
+            <CheckBox fx:id="doublePayCheckBox" text="Double Pay"/>
+            <Button text="Log Work" onAction="#onLogWork"/>
+        </HBox>
 
-            <!-- Results -->
-            <TextArea fx:id="resultArea" prefHeight="300" wrapText="true"/>
-        </VBox>
-    </center>
+        <!-- Updated main-view.fxml with clean UI -->
+        <HBox spacing="10.0" alignment="CENTER_LEFT">
+            <Button text="Show Time" onAction="#onShowTotal"/>
+            <Button text="Show Earnings" onAction="#onShowEarnings"/>
+            <Button text="📊 Monthly/Yearly Summary" onAction="#onShowSummaryByMonthAndYear"/>
+            <Button text="📤 Export Excel" onAction="#onExportExcel"/>
+            <Button fx:id="openLogEditorBtn" text="📋 View/Edit Logs" onAction="#onOpenLogEditor" />
+        </HBox>
+
+        <!-- TableView for logs -->
+        <TableView fx:id="logTable" prefHeight="230" VBox.vgrow="ALWAYS">
+            <columns>
+                <TableColumn fx:id="dateCol" text="Date" prefWidth="100" />
+                <TableColumn fx:id="companyCol" text="Company" prefWidth="120" />
+                <TableColumn fx:id="hoursCol" text="Hours" prefWidth="70" />
+                <TableColumn fx:id="minutesCol" text="Minutes" prefWidth="70" />
+                <TableColumn fx:id="doublePayCol" text="Double Pay" prefWidth="80" />
+                <TableColumn fx:id="earningsCol" text="Earnings" prefWidth="80" />
+            </columns>
+            <SplitPane orientation="VERTICAL">
+
+                    <contextMenu>
+                        <ContextMenu>
+                            <items>
+                                <MenuItem text="Edit Entry" onAction="#onEditLogEntry"/>
+                                <MenuItem text="Delete Entry" onAction="#onDeleteLogEntry"/>
+                            </items>
+                        </ContextMenu>
+                    </contextMenu>
+
+            </SplitPane>
+
+        </TableView>
+
+        <!-- Info/Status/Warning area -->
+        <Label fx:id="netTotalLabel" text="📉 Net Total:" />
+        <TextArea fx:id="statusArea" prefHeight="180" editable="false"/>
+    </VBox>
+</center>
+
+<bottom>
+    <VBox spacing="10.0">
+        <padding>
+            <Insets top="10" right="10" bottom="10" left="10"/>
+        </padding>
+        <HBox spacing="10.0" alignment="CENTER_LEFT">
+            <Label text="Year:"/>
+            <ComboBox fx:id="yearFilter" prefWidth="100"/>
+            <Label text="Month:"/>
+            <ComboBox fx:id="monthFilter" prefWidth="100"/>
+            <Label text="Company:"/>
+            <ComboBox fx:id="companyFilter" prefWidth="150"/>
+            <Button fx:id="applyFilterBtn" text="Apply Filter" onAction="#onApplyFilter"/>
+            <Button fx:id="clearFilterBtn" text="Clear Filter" onAction="#onClearFilter"/>
+            <Button fx:id="editBillsBtn" text="💸 Edit Bills" onAction="#onEditBills"/>
+        </HBox>
+    </VBox>
+</bottom>
 </BorderPane>

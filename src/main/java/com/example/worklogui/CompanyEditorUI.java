@@ -1,5 +1,7 @@
 package com.example.worklogui;
 
+import com.example.worklogui.exceptions.CompanyOperationException;
+import com.example.worklogui.utils.DateUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import javafx.geometry.Insets;
@@ -30,11 +32,14 @@ public class CompanyEditorUI {
         nameCol.setPrefWidth(180);
 
         TableColumn<Map.Entry<String, RateInfo>, String> rateCol = new TableColumn<>("Rate");
-        rateCol.setCellValueFactory(param -> new javafx.beans.property.SimpleStringProperty(
-                String.format(Locale.US, "$ %.2f (%s)",
-                        param.getValue().getValue().getValor(),
-                        param.getValue().getValue().getTipo())
-        ));
+        rateCol.setCellValueFactory(param -> {
+            String displayType = param.getValue().getValue().getTipo().equals("hora") ? "hour" : "minute";
+            return new javafx.beans.property.SimpleStringProperty(
+                    String.format(Locale.US, "$ %.2f (%s)",
+                            param.getValue().getValue().getValor(),
+                            displayType)
+            );
+        });
         rateCol.setPrefWidth(150);
 
         table.getColumns().addAll(nameCol, rateCol);
@@ -64,7 +69,7 @@ public class CompanyEditorUI {
                 if (result.isPresent() && result.get() == ButtonType.OK) {
                     companyRates.remove(selected.getKey());
                     refreshTable();
-                    saveRates(); // ✅ Only save if confirmed
+                    saveRates();
                 }
             } else {
                 Alert warn = new Alert(Alert.AlertType.WARNING,
@@ -76,7 +81,7 @@ public class CompanyEditorUI {
 
         saveBtn.setOnAction(e -> {
             saveRates();
-            refreshTable(); // ✅ Now visibly updates the table
+            refreshTable();
         });
         closeBtn.setOnAction(e -> {
             Stage stage = (Stage) closeBtn.getScene().getWindow();
@@ -102,90 +107,6 @@ public class CompanyEditorUI {
         stage.setOnHiding(e -> {
             if (onCloseCallback != null) onCloseCallback.run();
         });
-
-    }
-
-    private void openEditor(String existingName) {
-        Dialog<Map.Entry<String, RateInfo>> dialog = new Dialog<>();
-        dialog.setTitle(existingName == null ? "Add Company" : "Edit Company");
-
-        Label nameLabel = new Label("Name:");
-        TextField nameField = new TextField(existingName != null ? existingName : "");
-
-        Label rateLabel = new Label("Rate ($):");
-        TextField rateField = new TextField();
-        ComboBox<String> typeCombo = new ComboBox<>();
-        typeCombo.getItems().addAll("hora", "minuto");
-
-        if (existingName != null) {
-            RateInfo info = companyRates.get(existingName);
-            rateField.setText(String.format(Locale.US, "%.2f", info.getValor()));
-            typeCombo.setValue(info.getTipo());
-        } else {
-            typeCombo.setValue("hora");
-        }
-
-        Label typeLabel = new Label("Type:");
-
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new Insets(20, 150, 10, 10));
-        grid.add(nameLabel, 0, 0);
-        grid.add(nameField, 1, 0);
-        grid.add(rateLabel, 0, 1);
-        grid.add(rateField, 1, 1);
-        grid.add(typeLabel, 0, 2);
-        grid.add(typeCombo, 1, 2);
-
-        dialog.getDialogPane().setContent(grid);
-        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
-
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == ButtonType.OK) {
-                String name = nameField.getText().trim();
-                String rateText = rateField.getText().trim();
-                String tipo = typeCombo.getValue();
-                if (!name.isEmpty() && rateText.matches("\\d*(\\.\\d{1,2})?"))
-                {
-                    double rate = Double.parseDouble(rateText);
-                    return Map.entry(name, new RateInfo(rate, tipo));
-                } else {
-                    Alert alert = new Alert(Alert.AlertType.ERROR,
-                            AppConstants.ERROR_INVALID_RATE_EN + "\n" + AppConstants.ERROR_INVALID_RATE_PT);
-                    alert.showAndWait();
-                }
-            }
-            return null;
-        });
-
-        Optional<Map.Entry<String, RateInfo>> result = dialog.showAndWait();
-        result.ifPresent(entry -> {
-            String newName = entry.getKey();
-            RateInfo newInfo = entry.getValue();
-
-            if (existingName != null && !existingName.equals(newName)) {
-                companyRates.remove(existingName);
-
-                // ✅ Rename in saved log file
-                try {
-                    Path worklogPath = AppConstants.WORKLOG_PATH;
-                    List<RegistroTrabalho> logs = FileLoader.carregarRegistros(worklogPath);
-                    for (RegistroTrabalho r : logs) {
-                        if (r.getEmpresa().equals(existingName)) {
-                            r.setEmpresa(newName);
-                        }
-                    }
-                    FileLoader.salvarRegistros(worklogPath, logs);
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
-            }
-
-            companyRates.put(newName, newInfo);
-            refreshTable();
-        });
-
 
     }
 
@@ -230,4 +151,129 @@ public class CompanyEditorUI {
             errorAlert.showAndWait();
         }
     }
+
+    private void openEditor(String existingName) {
+        Dialog<Map.Entry<String, RateInfo>> dialog = new Dialog<>();
+        dialog.setTitle(existingName == null ? "Add Company" : "Edit Company");
+
+        Label nameLabel = new Label("Name:");
+        TextField nameField = new TextField(existingName != null ? existingName : "");
+
+        Label rateLabel = new Label("Rate ($):");
+        TextField rateField = new TextField();
+        ComboBox<String> typeCombo = new ComboBox<>();
+        typeCombo.getItems().addAll("hour", "minute");
+
+        if (existingName != null) {
+            RateInfo info = companyRates.get(existingName);
+            rateField.setText(String.format(Locale.US, "%.2f", info.getValor()));
+            typeCombo.setValue(info.getTipo().equals("hora") ? "hour" : "minute");        } else {
+            typeCombo.setValue("hour");
+        }
+
+        Label typeLabel = new Label("Type:");
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 150, 10, 10));
+        grid.add(nameLabel, 0, 0);
+        grid.add(nameField, 1, 0);
+        grid.add(rateLabel, 0, 1);
+        grid.add(rateField, 1, 1);
+        grid.add(typeLabel, 0, 2);
+        grid.add(typeCombo, 1, 2);
+
+        dialog.getDialogPane().setContent(grid);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == ButtonType.OK) {
+                String name = nameField.getText().trim();
+                String rateText = rateField.getText().trim();
+                String tipo = typeCombo.getValue().equals("hour") ? "hora" : "minuto";                if (!name.isEmpty() && rateText.matches("\\d*(\\.\\d{1,2})?")) {
+                    double rate = Double.parseDouble(rateText);
+                    return Map.entry(name, new RateInfo(rate, tipo));
+                } else {
+                    Alert alert = new Alert(Alert.AlertType.ERROR,
+                            AppConstants.ERROR_INVALID_RATE_EN + "\n" + AppConstants.ERROR_INVALID_RATE_PT);
+                    alert.showAndWait();
+                }
+            }
+            return null;
+        });
+
+        Optional<Map.Entry<String, RateInfo>> result = dialog.showAndWait();
+        result.ifPresent(entry -> {
+            String newName = entry.getKey();
+            RateInfo newInfo = entry.getValue();
+
+            if (existingName != null && !existingName.equals(newName)) {
+                companyRates.remove(existingName);
+
+                // ✅ NEW: Use service to rename company across all monthly files
+                try {
+                    CompanyManagerService service = new CompanyManagerService();
+                    service.initialize();
+                    renameCompanyInAllLogs(service, existingName, newName);
+                } catch (Exception ex) {
+                    System.err.println("Failed to rename company in logs: " + ex.getMessage());
+                    ex.printStackTrace();
+                    // Show error but don't fail completely
+                    Alert errorAlert = new Alert(Alert.AlertType.WARNING,
+                            "Company rate updated but failed to rename in existing logs: " + ex.getMessage());
+                    errorAlert.setHeaderText("Partial Update");
+                    errorAlert.showAndWait();
+                }
+            }
+
+            companyRates.put(newName, newInfo);
+            refreshTable();
+        });
     }
+
+    /**
+     * NEW METHOD: Rename company in all log files
+     */
+    private void renameCompanyInAllLogs(CompanyManagerService service, String oldName, String newName) {
+        try {
+            List<RegistroTrabalho> allLogs = service.getRegistros();
+            boolean hasChanges = false;
+
+            // Update company names in logs
+            for (RegistroTrabalho log : allLogs) {
+                if (oldName.equals(log.getEmpresa())) {
+                    log.setEmpresa(newName);
+                    hasChanges = true;
+                }
+            }
+
+            if (hasChanges) {
+                // Group by month and save using service method
+                Map<String, List<RegistroTrabalho>> monthlyLogs = new HashMap<>();
+                for (RegistroTrabalho log : allLogs) {
+                    String yearMonth = DateUtils.getYearMonthKeyFromDateString(log.getData());
+                    if (yearMonth != null) {
+                        monthlyLogs.computeIfAbsent(yearMonth, k -> new ArrayList<>()).add(log);
+                    }
+                }
+
+                // Clear existing files first
+                for (String yearMonth : monthlyLogs.keySet()) {
+                    service.saveWorkLogsForMonth(yearMonth, new ArrayList<>());
+                }
+
+                // Save updated logs for each month
+                for (Map.Entry<String, List<RegistroTrabalho>> entry : monthlyLogs.entrySet()) {
+                    String yearMonth = entry.getKey();
+                    List<RegistroTrabalho> monthLogs = entry.getValue();
+                    service.saveWorkLogsForMonth(yearMonth, monthLogs);
+                }
+
+                System.out.println("✅ Successfully renamed company '" + oldName + "' to '" + newName + "' in all logs");
+            }
+
+        } catch (Exception e) {
+            throw new CompanyOperationException("Failed to rename company in logs", e);
+        }
+    }}

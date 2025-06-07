@@ -1,5 +1,12 @@
 package com.example.worklogui;
 
+import com.example.worklogui.exceptions.WorkLogNotFoundException;
+import com.example.worklogui.exceptions.WorkLogServiceException;
+import com.example.worklogui.services.WorkLogBusinessService;
+import com.example.worklogui.utils.DateUtils;
+import com.example.worklogui.utils.ErrorHandler;
+import com.example.worklogui.utils.FilterHelper;
+import com.example.worklogui.utils.ProgressDialog;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.stage.Stage;
@@ -7,13 +14,16 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.geometry.Insets;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
+import javafx.application.Platform;
+import javafx.concurrent.Task;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
 
 public class LogEditorController {
 
@@ -39,86 +49,77 @@ public class LogEditorController {
     private Button closeBtn;
 
     @FXML
-    private VBox rootContainer; // Add this if your root container is a VBox
+    private VBox rootContainer;
 
     private List<RegistroTrabalho> registros = new ArrayList<>();
     private Runnable onSaveCallback;
+    private CompanyManagerService service;
+    private WorkLogBusinessService businessService;
 
-    /**
-     * Sets the list of work log records to be displayed and edited.
-     * @param registros The list of RegistroTrabalho objects
-     */
+    // Filter tracking fields
+    private String currentFilterYear;
+    private String currentFilterMonth;
+    private String currentFilterCompany;
+    private BiConsumer<String, String> onFilterCallback;
+
+    public void setService(CompanyManagerService service) {
+        this.service = service;
+        this.businessService = new WorkLogBusinessService(service.getWorkLogFileManager());
+    }
+
     public void setRegistros(List<RegistroTrabalho> registros) {
-        this.registros = registros;
+        this.registros = new ArrayList<>(registros); // Defensive copy
         if (logTable != null) {
             refreshLogTable();
-        } else {
-            System.out.println("WARNING: logTable is null in setRegistros()");
         }
     }
 
-    /**
-     * Sets a callback to be executed when changes are saved.
-     * This allows the parent controller to refresh its data.
-     * @param callback The callback to execute after saving changes
-     */
     public void setOnSaveCallback(Runnable callback) {
         this.onSaveCallback = callback;
     }
 
-    @FXML
-    public void initialize() {
-        System.out.println("LogEditorController initializing...");
-
-        if (logTable == null) {
-            System.out.println("ERROR: logTable is null in initialize()!");
-            // Try to find the table in the scene
-            // This is a last resort and not ideal, but can help debug
-            return;
-        }
-
-        System.out.println("logTable successfully initialized");
-
-        // Clear any existing columns to avoid duplicates
-        logTable.getColumns().clear();
-
-        // Setup table columns
-        setupLogTable();
-
-        System.out.println("Table setup complete");
+    public void setFilterValues(String year, String month, String company) {
+        this.currentFilterYear = year;
+        this.currentFilterMonth = month;
+        this.currentFilterCompany = company;
+        System.out.println("Filter values set: year=" + year + ", month=" + month + ", company=" + company);
     }
 
-    /**
-     * Sets up the TableView columns and behavior.
-     */
+    public void setOnFilterCallback(BiConsumer<String, String> callback) {
+        this.onFilterCallback = callback;
+    }
+
+    @FXML
+    public void initialize() {
+        logTable.getColumns().clear();
+        setupLogTable();
+    }
+
     private void setupLogTable() {
         try {
-            // Check if we already have the dateColumn from FXML
+            // Date column
             if (dateColumn != null) {
                 dateColumn.setCellValueFactory(cellData -> new SimpleStringProperty(
                         cellData.getValue().getData()));
             } else {
-                // Create date column if it doesn't exist
                 TableColumn<RegistroTrabalho, String> dateCol = new TableColumn<>("Date");
                 dateCol.setCellValueFactory(cellData -> {
                     try {
-                        LocalDate parsed = LocalDate.parse(cellData.getValue().getData(), DateTimeFormatter.ofPattern("MM/dd/yyyy"));
-                        return new SimpleStringProperty(parsed.format(DateTimeFormatter.ofPattern("MM/dd/yyyy")));
+                        LocalDate parsed = DateUtils.parseDisplayDate(cellData.getValue().getData());
+                        return new SimpleStringProperty(DateUtils.formatDisplayDate(parsed));
                     } catch (Exception e) {
                         return new SimpleStringProperty(cellData.getValue().getData());
                     }
                 });
-
                 dateCol.setPrefWidth(100);
                 logTable.getColumns().add(dateCol);
             }
 
-            // Check if we already have the companyColumn from FXML
+            // Company column
             if (companyColumn != null) {
                 companyColumn.setCellValueFactory(cellData -> new SimpleStringProperty(
                         cellData.getValue().getEmpresa()));
             } else {
-                // Create company column if it doesn't exist
                 TableColumn<RegistroTrabalho, String> companyCol = new TableColumn<>("Company");
                 companyCol.setCellValueFactory(cellData -> new SimpleStringProperty(
                         cellData.getValue().getEmpresa()));
@@ -126,48 +127,38 @@ public class LogEditorController {
                 logTable.getColumns().add(companyCol);
             }
 
-            // Create hours column
+            // Hours column
             TableColumn<RegistroTrabalho, String> hoursCol = new TableColumn<>("Hours");
             hoursCol.setCellValueFactory(cellData -> new SimpleStringProperty(
                     String.format("%.2f", cellData.getValue().getHoras())));
             hoursCol.setPrefWidth(70);
             logTable.getColumns().add(hoursCol);
 
-            // Create minutes column
+            // Minutes column
             TableColumn<RegistroTrabalho, String> minutesCol = new TableColumn<>("Minutes");
             minutesCol.setCellValueFactory(cellData -> new SimpleStringProperty(
                     String.format("%.0f", cellData.getValue().getMinutos())));
             minutesCol.setPrefWidth(70);
             logTable.getColumns().add(minutesCol);
 
-            // Create double pay column
+            // Double pay column
             TableColumn<RegistroTrabalho, String> doublePayCol = new TableColumn<>("Double Pay");
             doublePayCol.setCellValueFactory(cellData -> new SimpleStringProperty(
                     cellData.getValue().isPagamentoDobrado() ? "Yes" : "No"));
             doublePayCol.setPrefWidth(80);
             logTable.getColumns().add(doublePayCol);
 
-            // Create earnings column
+            // Earnings column
             TableColumn<RegistroTrabalho, String> earningsCol = new TableColumn<>("Earnings");
             earningsCol.setCellValueFactory(cellData -> {
                 RegistroTrabalho r = cellData.getValue();
-                String tipo = r.getTipoUsado() != null ? r.getTipoUsado() : "hour";
-                double taxa = r.getTaxaUsada();
-                double earnings;
-
-                if (tipo.equalsIgnoreCase("minuto")) {
-                    earnings = r.getMinutos() * taxa;
+                if (businessService != null) {
+                    double earnings = businessService.calculateEarnings(r);
+                    return new SimpleStringProperty(String.format("$%.2f", earnings));
                 } else {
-                    earnings = (r.getHoras() * taxa) + (r.getMinutos() * (taxa / 60.0));
+                    return new SimpleStringProperty("N/A");
                 }
-
-                if (r.isPagamentoDobrado()) {
-                    earnings *= 2;
-                }
-
-                return new SimpleStringProperty(String.format("$%.2f", earnings));
             });
-
             earningsCol.setPrefWidth(80);
             logTable.getColumns().add(earningsCol);
 
@@ -190,96 +181,298 @@ public class LogEditorController {
         }
     }
 
-    /**
-     * Refreshes the TableView with the current list of work logs.
-     */
     private void refreshLogTable() {
-        try {
-            logTable.getItems().clear();
-            logTable.getItems().addAll(registros);
-            System.out.println("Table refreshed with " + registros.size() + " items");
-        } catch (Exception e) {
-            System.out.println("Error refreshing table: " + e.getMessage());
-            e.printStackTrace();
-        }
+        logTable.getItems().clear();
+        logTable.getItems().addAll(registros);
     }
 
-    /**
-     * Handles the click event for the Edit button.
-     */
     @FXML
     public void onEditLog() {
         RegistroTrabalho selected = logTable.getSelectionModel().getSelectedItem();
         if (selected != null) {
             editLogEntry(selected);
         } else {
-            showAlert(Alert.AlertType.WARNING, "No Selection",
-                    "Please select a log entry to edit.");
+            showAlert(Alert.AlertType.WARNING, "No Selection / Nenhuma Seleção",
+                    "Please select a log entry to edit.\nPor favor, selecione um registro para editar.");
         }
     }
 
-    /**
-     * Handles the click event for the Delete button.
-     */
     @FXML
     public void onDeleteLog() {
         RegistroTrabalho selected = logTable.getSelectionModel().getSelectedItem();
         if (selected != null) {
+            System.out.println("Selected log for deletion: " + selected.getEmpresa() + " on " + selected.getData());
+
             Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
-                    "Are you sure you want to delete this log entry?",
+                    "Are you sure you want to delete this log entry?\nTem certeza de que deseja excluir este registro?",
                     ButtonType.YES, ButtonType.NO);
-            confirmation.setHeaderText("Confirm Deletion");
+            confirmation.setHeaderText("Confirm Deletion / Confirmar Exclusão");
 
             confirmation.showAndWait().ifPresent(response -> {
                 if (response == ButtonType.YES) {
-                    registros.remove(selected);
-                    saveAndRefreshLogs("Log entry deleted successfully.");
+                    performDeleteInBackground(selected);
                 }
             });
         } else {
-            showAlert(Alert.AlertType.WARNING, "No Selection",
-                    "Please select a log entry to delete.");
+            showAlert(Alert.AlertType.WARNING, "No Selection / Nenhuma Seleção",
+                    "Please select a log entry to delete.\nPor favor, selecione um registro para excluir.");
         }
     }
 
-    /**
-     * Handles the click event for the Clear All Logs button.
-     */
     @FXML
     public void onClearAllLogs() {
-        Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
-                "Are you sure you want to delete ALL log entries?\nThis action cannot be undone.",
-                ButtonType.YES, ButtonType.NO);
-        confirmation.setHeaderText("Confirm Delete All");
+        logClearDebugInfo();
+        final boolean hasFilter = FilterHelper.hasActiveFilters(currentFilterYear, currentFilterMonth, currentFilterCompany);
 
-        confirmation.showAndWait().ifPresent(response -> {
-            if (response == ButtonType.YES) {
-                registros.clear();
-                saveAndRefreshLogs("All log entries have been cleared.");
-            }
-        });
-    }
-
-    /**
-     * Handles the click event for the Close button.
-     */
-    @FXML
-    public void onClose() {
-        try {
-            Stage stage = (Stage) closeBtn.getScene().getWindow();
-            stage.close();
-        } catch (Exception e) {
-            System.out.println("Error closing window: " + e.getMessage());
-            e.printStackTrace();
+        if (confirmClearOperation(hasFilter)) {
+            performClearLogsInBackground(hasFilter);
         }
     }
 
     /**
-     * Opens a dialog to edit the selected work log entry.
-     * @param entry The work log entry to edit
+     * Performs clear logs operation in background thread to avoid UI blocking
      */
+    private void performClearLogsInBackground(boolean hasFilter) {
+        Task<Integer> clearTask = new Task<Integer>() {
+            @Override
+            protected Integer call() throws Exception {
+                updateMessage("Preparing to clear logs...");
+                updateProgress(0, 100);
+
+                AtomicInteger removedCount = new AtomicInteger(0);
+
+                if (hasFilter) {
+                    updateMessage("Clearing filtered logs...");
+                    updateProgress(25, 100);
+                    clearFilteredLogs(removedCount);
+                } else {
+                    updateMessage("Clearing all logs...");
+                    updateProgress(25, 100);
+                    clearAllLogs(removedCount);
+                }
+
+                updateProgress(100, 100);
+                updateMessage("Clear operation completed");
+                return removedCount.get();
+            }
+
+            @Override
+            protected void succeeded() {
+                Platform.runLater(() -> {
+                    handleClearSuccess(hasFilter, getValue());
+                });
+            }
+
+            @Override
+            protected void failed() {
+                Platform.runLater(() -> {
+                    Throwable exception = getException();
+                    handleClearError(exception);
+                });
+            }
+        };
+
+        // Show progress dialog
+        ProgressDialog progressDialog = new ProgressDialog(clearTask);
+        progressDialog.setTitle("Clearing Logs");
+        progressDialog.setHeaderText("Please wait while logs are being cleared...");
+
+        // Run task in background
+        Thread clearThread = new Thread(clearTask);
+        clearThread.setDaemon(true);
+        clearThread.start();
+
+        progressDialog.showAndWait();
+    }
+
+    /**
+     * Performs delete operation in background thread
+     */
+    private void performDeleteInBackground(RegistroTrabalho selected) {
+        Task<Void> deleteTask = new Task<Void>() {
+            @Override
+            protected Void call() throws Exception {
+                updateMessage("Deleting log entry...");
+                updateProgress(50, 100);
+
+                if (businessService != null) {
+                    businessService.deleteWorkLog(selected);
+                }
+
+                updateProgress(100, 100);
+                updateMessage("Delete completed");
+                return null;
+            }
+
+            @Override
+            protected void succeeded() {
+                Platform.runLater(() -> {
+                    // Remove from local list and UI
+                    registros.remove(selected);
+                    logTable.getItems().remove(selected);
+                    logTable.refresh();
+
+                    if (onSaveCallback != null) {
+                        onSaveCallback.run();
+                    }
+
+                    showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso",
+                            "✔ Log deleted.\n✔ Registro excluído.");
+                });
+            }
+
+            @Override
+            protected void failed() {
+                Platform.runLater(() -> {
+                    Throwable throwable = getException();
+                    Exception exception = (throwable instanceof Exception) ?
+                            (Exception) throwable :
+                            new Exception("Task failed", throwable);
+                    ErrorHandler.handleUnexpectedError("deleting log entry", exception);
+                    showAlert(Alert.AlertType.ERROR, "Error / Erro",
+                            "Failed to delete log entry:\nFalha ao excluir registro:\n" + throwable.getMessage());
+                });
+            }
+        };
+
+        Thread deleteThread = new Thread(deleteTask);
+        deleteThread.setDaemon(true);
+        deleteThread.start();
+    }
+
+    private void logClearDebugInfo() {
+        System.out.println("===== DEBUG INFO =====");
+        System.out.println("Current filter year: " + currentFilterYear);
+        System.out.println("Current filter month: " + currentFilterMonth);
+        System.out.println("Current filter company: " + currentFilterCompany);
+        System.out.println("Total registros: " + registros.size());
+
+        int matchingLogs = 0;
+        for (RegistroTrabalho log : registros) {
+            boolean matches = FilterHelper.matchesFilters(log, currentFilterYear, currentFilterMonth, currentFilterCompany);
+            if (matches) {
+                matchingLogs++;
+                System.out.println("Log matches filter: " + log.getData() + " - " + log.getEmpresa());
+            }
+        }
+        System.out.println("Logs matching filter: " + matchingLogs);
+        System.out.println("=====================");
+    }
+
+    private boolean confirmClearOperation(boolean hasFilter) {
+        String confirmMessage = hasFilter ?
+                "Are you sure you want to delete all FILTERED log entries?\nTem certeza de que deseja excluir TODOS os registros FILTRADOS?" :
+                "Are you sure you want to delete ALL log entries?\nTem certeza de que deseja excluir TODOS os registros?";
+
+        String headerText = hasFilter ?
+                "Clear Filtered Logs / Limpar Registros Filtrados" :
+                "Confirm Delete All / Confirmar Exclusão Total";
+
+        Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
+                confirmMessage, ButtonType.YES, ButtonType.NO);
+        confirmation.setHeaderText(headerText);
+
+        return confirmation.showAndWait()
+                .map(response -> response == ButtonType.YES)
+                .orElse(false);
+    }
+
+    private void clearFilteredLogs(AtomicInteger removedCount) throws Exception {
+        System.out.println("Clearing with filters: year=" + currentFilterYear +
+                ", month=" + currentFilterMonth +
+                ", company=" + currentFilterCompany);
+
+        List<RegistroTrabalho> allLogs = service != null ? service.getRegistros() : new ArrayList<>();
+        System.out.println("Loaded " + allLogs.size() + " total logs from service");
+
+        List<RegistroTrabalho> logsToKeep = new ArrayList<>();
+        for (RegistroTrabalho log : allLogs) {
+            if (!FilterHelper.matchesFilters(log, currentFilterYear, currentFilterMonth, currentFilterCompany)) {
+                logsToKeep.add(log);
+            } else {
+                removedCount.incrementAndGet();
+                System.out.println("Removing log: " + log.getEmpresa() + " on " + log.getData());
+            }
+        }
+
+        System.out.println("Keeping " + logsToKeep.size() + " logs, removing " + removedCount.get());
+
+        if (service != null) {
+            saveUpdatedLogsToService(logsToKeep);
+        }
+
+        updateLocalDisplayAfterFiltering(logsToKeep);
+    }
+
+    private void clearAllLogs(AtomicInteger removedCount) throws WorkLogNotFoundException, WorkLogServiceException {
+        removedCount.set(registros.size());
+        System.out.println("Clearing all " + removedCount.get() + " logs");
+
+        if (service != null) {
+            for (RegistroTrabalho log : new ArrayList<>(registros)) {
+                service.deleteRegistro(log);
+            }
+        }
+        registros.clear();
+    }
+
+    private void updateLocalDisplayAfterFiltering(List<RegistroTrabalho> logsToKeep) {
+        registros.clear();
+        for (RegistroTrabalho log : logsToKeep) {
+            if (FilterHelper.matchesFilters(log, currentFilterYear, currentFilterMonth, currentFilterCompany)) {
+                registros.add(log);
+            }
+        }
+    }
+
+    private void handleClearSuccess(boolean hasFilter, int removedCount) {
+        refreshLogTable();
+
+        if (onSaveCallback != null) {
+            onSaveCallback.run();
+        }
+
+        String successMessage = hasFilter ?
+                "✔ All filtered logs cleared (" + removedCount + " entries).\n✔ Todos os registros filtrados foram excluídos (" + removedCount + " entradas)." :
+                "✔ All logs cleared.\n✔ Todos os registros foram excluídos.";
+
+        showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso", successMessage);
+    }
+
+    private void handleClearError(Throwable throwable) {
+        Exception exception = (throwable instanceof Exception) ?
+                (Exception) throwable :
+                new Exception("Clear operation failed", throwable);
+        ErrorHandler.handleUnexpectedError("clearing logs", exception);
+        showAlert(Alert.AlertType.ERROR, "Error / Erro",
+                "Failed to clear logs:\nFalha ao limpar registros:\n" + throwable.getMessage());
+    }
+
+    private void saveUpdatedLogsToService(List<RegistroTrabalho> allLogs) throws Exception {
+        // Group logs by month
+        var monthlyLogs = FilterHelper.groupByYearMonth(allLogs);
+
+        // Get current monthly files and clear them first
+        List<String> existingKeys = service.getWorkLogFileManager().getAvailableYearMonthKeys();
+        for (String key : existingKeys) {
+            service.getWorkLogFileManager().saveWorkLogs(key, new ArrayList<>());
+        }
+
+        // Save updated logs by month
+        for (var entry : monthlyLogs.entrySet()) {
+            String yearMonth = entry.getKey();
+            List<RegistroTrabalho> monthLogs = entry.getValue();
+            service.getWorkLogFileManager().saveWorkLogs(yearMonth, monthLogs);
+        }
+    }
+
+    @FXML
+    public void onClose() {
+        Stage stage = (Stage) closeBtn.getScene().getWindow();
+        stage.close();
+    }
+
     private void editLogEntry(RegistroTrabalho entry) {
-        // Create a dialog for editing
         Dialog<RegistroTrabalho> dialog = new Dialog<>();
         dialog.getDialogPane().getStylesheets().add(
                 getClass().getResource("/style.css").toExternalForm()
@@ -288,38 +481,59 @@ public class LogEditorController {
         dialog.setTitle("Edit Log Entry");
         dialog.setHeaderText("Edit Work Log Entry");
 
-        // Set the button types
         ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
 
-        // Create the form grid
         GridPane grid = new GridPane();
         grid.setHgap(10);
         grid.setVgap(10);
         grid.setPadding(new Insets(20, 150, 10, 10));
 
-        // Date field
-        TextField dateTextField = new TextField(entry.getData());
-        dateTextField.setPromptText("DD/MM/YYYY");
+        // Date picker
+        DatePicker datePicker = new DatePicker();
+        datePicker.setConverter(new javafx.util.StringConverter<LocalDate>() {
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+
+            @Override
+            public String toString(LocalDate date) {
+                return date != null ? formatter.format(date) : "";
+            }
+
+            @Override
+            public LocalDate fromString(String string) {
+                if (string != null && !string.isEmpty()) {
+                    return LocalDate.parse(string, formatter);
+                } else {
+                    return null;
+                }
+            }
+        });
+
+        // Store original date for comparison
+        LocalDate originalDate = null;
+        try {
+            originalDate = DateUtils.parseDisplayDate(entry.getData());
+            datePicker.setValue(originalDate);
+        } catch (Exception e) {
+            datePicker.setValue(LocalDate.now());
+        }
 
         // Company dropdown
         ComboBox<String> companyCombo = new ComboBox<>();
         companyCombo.getItems().addAll(CompanyRateService.getInstance().getRates().keySet());
         companyCombo.setValue(entry.getEmpresa());
 
-        // Hours field
+        // Hours and minutes fields
         TextField hoursField = new TextField(String.format("%.2f", entry.getHoras()));
-
-        // Minutes field
         TextField minutesField = new TextField(String.format("%.0f", entry.getMinutos()));
 
         // Double pay checkbox
         CheckBox doublePayCheck = new CheckBox("Double Pay");
         doublePayCheck.setSelected(entry.isPagamentoDobrado());
 
-        // Add fields to grid
+        // Add to grid
         grid.add(new Label("Date:"), 0, 0);
-        grid.add(dateTextField, 1, 0);
+        grid.add(datePicker, 1, 0);
         grid.add(new Label("Company:"), 0, 1);
         grid.add(companyCombo, 1, 1);
         grid.add(new Label("Hours:"), 0, 2);
@@ -329,45 +543,27 @@ public class LogEditorController {
         grid.add(doublePayCheck, 1, 4);
 
         dialog.getDialogPane().setContent(grid);
+        Platform.runLater(() -> datePicker.requestFocus());
 
-        // Request focus on the date field by default
-        dateTextField.requestFocus();
+        final LocalDate finalOriginalDate = originalDate;
 
-        // Convert the result to a RegistroTrabalho object when the save button is clicked
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == saveButtonType) {
                 try {
-                    // Validate date
-                    String date = dateTextField.getText().trim();
-                    LocalDate parsedDate;
-                    try {
-                        parsedDate = DateParser.parseDate(date);
-                        date = parsedDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
-                    } catch (DateTimeParseException e) {
+                    LocalDate selectedDate = datePicker.getValue();
+                    if (selectedDate == null) {
                         showAlert(Alert.AlertType.ERROR, "Invalid Date",
-                                "Please enter a valid date in MM/DD/YYYY format.");
+                                "Please select a valid date.");
                         return null;
                     }
 
-                    // Validate hours
-                    double hours;
-                    try {
-                        hours = Double.parseDouble(hoursField.getText().trim());
-                        if (hours < 0) throw new NumberFormatException("Hours cannot be negative");
-                    } catch (NumberFormatException e) {
-                        showAlert(Alert.AlertType.ERROR, "Invalid Hours",
-                                "Please enter a valid positive number for hours.");
-                        return null;
-                    }
+                    String date = DateUtils.formatDisplayDate(selectedDate);
+                    double hours = Double.parseDouble(hoursField.getText().trim());
+                    double minutes = Double.parseDouble(minutesField.getText().trim());
 
-                    // Validate minutes
-                    double minutes;
-                    try {
-                        minutes = Double.parseDouble(minutesField.getText().trim());
-                        if (minutes < 0) throw new NumberFormatException("Minutes cannot be negative");
-                    } catch (NumberFormatException e) {
-                        showAlert(Alert.AlertType.ERROR, "Invalid Minutes",
-                                "Please enter a valid positive number for minutes.");
+                    if (hours < 0 || minutes < 0) {
+                        showAlert(Alert.AlertType.ERROR, "Invalid Input",
+                                "Hours and minutes must be positive.");
                         return null;
                     }
 
@@ -389,55 +585,85 @@ public class LogEditorController {
             return null;
         });
 
-        // Show the dialog and process the result
         Optional<RegistroTrabalho> result = dialog.showAndWait();
 
         result.ifPresent(updatedEntry -> {
-            // Find the original entry index and replace it
-            int index = registros.indexOf(entry);
-            if (index >= 0) {
-                registros.set(index, updatedEntry);
-                saveAndRefreshLogs("Log entry updated successfully.");
+            try {
+                if (businessService != null) {
+                    businessService.updateWorkLog(entry, updatedEntry);
+                }
+
+                // Update local list
+                int index = registros.indexOf(entry);
+                if (index >= 0) {
+                    registros.set(index, updatedEntry);
+                }
+
+                // Get the new date
+                LocalDate newDate = DateUtils.parseDisplayDate(updatedEntry.getData());
+
+                // Check if the date changed
+                boolean dateChanged = finalOriginalDate != null &&
+                        (newDate.getYear() != finalOriginalDate.getYear() ||
+                                newDate.getMonthValue() != finalOriginalDate.getMonthValue());
+
+                System.out.println("Date changed: " + dateChanged);
+                System.out.println("Original date: " + finalOriginalDate);
+                System.out.println("New date: " + newDate);
+
+                // Update the table
+                refreshLogTable();
+
+                // If the date changed, use the filter callback
+                if (dateChanged && onFilterCallback != null) {
+                    System.out.println("Using onFilterCallback to update filter to new date");
+                    onFilterCallback.accept(
+                            String.valueOf(newDate.getYear()),
+                            String.format("%02d", newDate.getMonthValue())
+                    );
+                }
+                // Otherwise use the standard callback
+                else if (onSaveCallback != null) {
+                    System.out.println("Using onSaveCallback for regular update");
+                    onSaveCallback.run();
+                }
+
+                showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso",
+                        "✔ Log entry updated.\n✔ Registro atualizado.");
+            } catch (Exception e) {
+                ErrorHandler.handleUnexpectedError("updating log entry", e);
+                showAlert(Alert.AlertType.ERROR, "Error / Erro",
+                        "Failed to save changes:\nFalha ao salvar alterações:\n" + e.getMessage());
             }
         });
     }
 
-    /**
-     * Saves the current state of the work log entries and refreshes the table view.
-     * @param successMessage The message to display on success
-     */
-    private void saveAndRefreshLogs(String successMessage) {
+    @FXML
+    public void onSave() {
         try {
-            // Save the updated logs to the file
-            FileLoader.salvarRegistros(AppConstants.WORKLOG_PATH, registros);
-
-            // Refresh the table view
-            refreshLogTable();
-
-            // Show success message
-            showAlert(Alert.AlertType.INFORMATION, "Success", successMessage);
-
-            // Execute the callback if provided
+            // The service handles saving automatically, so just notify callback
             if (onSaveCallback != null) {
                 onSaveCallback.run();
             }
+
+            showAlert(Alert.AlertType.INFORMATION, "Success / Sucesso",
+                    "✓ Changes saved successfully.\n✓ Alterações salvas com sucesso.");
         } catch (Exception e) {
-            showAlert(Alert.AlertType.ERROR, "Error",
-                    "Failed to save changes: " + e.getMessage());
+            showAlert(Alert.AlertType.ERROR, "Error / Erro",
+                    "Failed to save changes:\nFalha ao salvar alterações:\n" + e.getMessage());
         }
     }
 
-    /**
-     * Shows an alert dialog with the specified type, title, and content.
-     * @param type The alert type
-     * @param title The alert title
-     * @param content The alert content
-     */
     private void showAlert(Alert.AlertType type, String title, String content) {
         Alert alert = new Alert(type);
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(content);
         alert.showAndWait();
+    }
+
+    // NEW: Getter method for service access
+    public CompanyManagerService getService() {
+        return service;
     }
 }
