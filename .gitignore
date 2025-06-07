@@ -6,23 +6,63 @@
 # Datasource local storage ignored files
 /dataSources/
 /dataSources.local.xml
-target/
+
+# IntelliJ IDEA (complete coverage)
 .idea/
+*.iml
+*.ipr
+*.iws
+
+# Build outputs
+target/
+build/
+out/
+
+# Compiled class files
 *.class
+
+# JAR files
 *.jar
-*.exe
+
+# Log files
 *.log
+
+# JSON data files (if they contain user data)
 *.json
+
+# Image files (unless they're required assets)
 *.jpg
+*.png
 *.ico
+
+# Icons directory (if it contains user-generated content)
 Icons/
+
+# UUID and other generated files
 UUID.txt
 worklog.json
 company-rates.json
-WorkLogUI.iml
-.codacy-claude-config
+
 # Codacy analysis files
+.codacy-claude-config
 codacy_results.json*
 claude_codacy_analysis.md
 claude_review.md.codacy
 CODACY_FIXES_PROGRESS.md
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Maven wrapper (optional - some prefer to include this)
+.mvn/
+mvnw
+mvnw.cmd
+
+# Version properties (if auto-generated)
+version.properties
+
+# Backup files
+*.bak
+*.tmp.claudeignore
+claude-codacy-enhanced.sh
