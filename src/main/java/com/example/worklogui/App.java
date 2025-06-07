@@ -24,7 +24,10 @@ public class App extends Application {
             System.err.println("⚠️ style.css not found in resources!");
         }
 
-        primaryStage.setResizable(false);
+        // Make application resizable with minimum size constraints
+        primaryStage.setResizable(true);
+        primaryStage.setMinWidth(800);
+        primaryStage.setMinHeight(600);
 
         InputStream iconStream = getClass().getResourceAsStream("/Icons/WorkLog.jpg");
         if (iconStream == null) {

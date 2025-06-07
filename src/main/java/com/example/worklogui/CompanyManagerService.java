@@ -122,10 +122,8 @@ public class CompanyManagerService {
     public List<Bill> getBillsForMonth(String yearMonth) {
         if (!this.bills.containsKey(yearMonth)) {
             Path path = getBillPath(yearMonth);
-            System.out.println("🔍 DEBUG: Loading bills from: " + path);
             List<Bill> result = carregarBills(path);
             this.bills.put(yearMonth, new ArrayList<>(result));
-            System.out.println("🔍 DEBUG: Loaded " + result.size() + " bills");
         }
         return new ArrayList<>(this.bills.getOrDefault(yearMonth, new ArrayList<>()));
     }

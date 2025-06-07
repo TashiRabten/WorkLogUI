@@ -107,6 +107,9 @@ public class CompanyManagerUI {
         logTableController.setupControls(logTable, dateCol, companyCol, hoursCol, minutesCol, doublePayCol, earningsCol, netTotalLabel);
         logTableController.setStatusMessageHandler(statusManager::setStatusMessage);
         logTableController.setFilterController(filterController);
+        
+        // Set table column resize policy to prevent empty columns
+        logTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
 
         // Set up export manager
         exportManager.setStatusMessageHandler(statusManager::setStatusMessage);
@@ -116,15 +119,11 @@ public class CompanyManagerUI {
         billsManager.setStatusMessageHandler(statusManager::setStatusMessage);
         billsManager.setWarningMessageHandler(warningManager::setWarning);
         billsManager.setOnBillsUpdatedCallback(this::refreshAfterBillsUpdated);
-        billsManager.setFilterSetterCallback((year, month) -> {
-            filterController.setFilterValues(year, month, null);
-            onApplyFilter();
-        });
+        // Filter setter callback removed as it was unused
 
     }
 
     private void refreshAfterWorkLogged() {
-        System.out.println("🔍 DEBUG: refreshAfterWorkLogged called");
 
         // Get the date of the log entry that was just added
         LocalDate entryDate = workLogEntryController.getLastAddedEntryDate();
@@ -139,7 +138,6 @@ public class CompanyManagerUI {
         }
 
         if (entryDate != null) {
-            System.out.println("🔍 DEBUG: Last added entry date: " + entryDate);
 
             // Refresh the year/month map AFTER reload
             filterController.refreshYearToMonthsMap();
@@ -148,7 +146,6 @@ public class CompanyManagerUI {
             String year = String.valueOf(entryDate.getYear());
             String month = String.format("%02d", entryDate.getMonthValue());
 
-            System.out.println("🔍 DEBUG: Setting filters to: " + year + "-" + month);
 
             // Update year dropdown items before setting values
             filterController.updateYearFilterItems();
@@ -159,7 +156,6 @@ public class CompanyManagerUI {
             // Apply the filter
             onApplyFilter();
         } else {
-            System.out.println("🔍 DEBUG: No date available for last added entry, using fallback");
             // Fallback to old behavior if no date available - but still reload
             filterController.refreshYearToMonthsMap();
             filterController.updateYearFilterItems();
@@ -169,7 +165,6 @@ public class CompanyManagerUI {
     }
     private void updateFiltersWithYearMonth(String year, String month) {
         try {
-            System.out.println("🔍 DEBUG: Updating filters to: " + year + "-" + month);
 
             // Reload data first to ensure we have the latest changes
             service.reloadRegistros();
@@ -238,6 +233,7 @@ public class CompanyManagerUI {
         statusManager.setStatusMessage("🔍 Applying filters...\n🔍 Aplicando filtros...");
 
         logTableController.updateTable(year, month, company);
+        
         warningManager.checkFilterWarnings(year, month);
 
         // Show completion message with filter details
@@ -392,6 +388,7 @@ public class CompanyManagerUI {
                 statusManager.setStatusMessage("🔄 Reloading data after editing...\n🔄 Recarregando dados após edição...");
 
                 service.reloadRegistros();
+                
                 filterController.refreshYearToMonthsMap();
                 filterController.updateYearFilterItems();
 
@@ -401,9 +398,10 @@ public class CompanyManagerUI {
                 statusManager.setStatusMessage("✅ Log editor closed. Data refreshed successfully.\n✅ Editor de registros fechado. Dados atualizados com sucesso.");
 
                 onApplyFilter();
+                
             } catch (Exception e) {
-                statusManager.setStatusMessage("❌ Error reloading data: " + e.getMessage() + "\n❌ Erro ao recarregar dados: " + e.getMessage());
                 e.printStackTrace();
+                statusManager.setStatusMessage("❌ Error reloading data: " + e.getMessage() + "\n❌ Erro ao recarregar dados: " + e.getMessage());
             }
         });
 

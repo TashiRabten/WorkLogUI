@@ -39,8 +39,6 @@ public class BillsEditorUI {
         this.onClose = onClose;
         this.onSaveCallback = onClose;
 
-        System.out.println("🔍 DEBUG: BillsEditorUI created with " + filteredBills.size() +
-                " filtered bills for context: " + yearMonthKey);
 
         // Add all the filtered bills to our observable list
         bills.addAll(filteredBills);
@@ -76,7 +74,6 @@ public class BillsEditorUI {
                 }
 
                 if (editedYear != null && editedMonth != null) {
-                    System.out.println("DEBUG: Bill edited - passing year: " + editedYear + ", month: " + editedMonth);
                     onSaveWithFilter.accept(editedYear, editedMonth);
                 } else {
                     // No filter update needed, just call without filters
@@ -139,6 +136,12 @@ public class BillsEditorUI {
         if (getClass().getResource("/style.css") != null) {
             stage.getScene().getStylesheets().add(getClass().getResource("/style.css").toExternalForm());
         }
+        
+        // Make resizable with minimum size
+        stage.setResizable(true);
+        stage.setMinWidth(700);
+        stage.setMinHeight(400);
+        
         return stage;
     }
 
@@ -169,8 +172,6 @@ public class BillsEditorUI {
     }
 
     private void performBillRemoval(Bill selected) {
-        System.out.println("🔍 DEBUG: Attempting to remove bill: " + selected.getDescription());
-        System.out.println("🔍 DEBUG: Current bills count: " + bills.size());
 
         if (confirmBillRemoval()) {
             String billMonth = String.format("%d-%02d",
@@ -485,6 +486,9 @@ public class BillsEditorUI {
         alert.showAndWait();
     }
     private void setupTableColumns() {
+        // Clear any existing columns to prevent duplicates
+        billsTable.getColumns().clear();
+        
         TableColumn<Bill, LocalDate> dateCol = new TableColumn<>("Date");
         dateCol.setCellValueFactory(cell -> new javafx.beans.property.SimpleObjectProperty<>(cell.getValue().getDate()));
         dateCol.setCellFactory(col -> new TableCell<>() {
@@ -554,6 +558,7 @@ public class BillsEditorUI {
         categoryCol.setPrefWidth(150);
 
         billsTable.getColumns().addAll(dateCol, descCol, amountCol, paidCol, categoryCol);
+        billsTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
     }
 
 }

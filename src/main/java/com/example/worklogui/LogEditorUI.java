@@ -104,16 +104,16 @@ public class LogEditorUI {
             // Set callbacks
             controller.setOnSaveCallback(() -> {
                 if (onCloseCallback != null) {
-                    System.out.println("Running onCloseCallback from LogEditorUI");
                     onCloseCallback.run();
+                } else {
                 }
             });
 
             // Set filter callback for updating filter dropdowns with new years/months
             controller.setOnFilterCallback((newYear, newMonth) -> {
                 if (onFilterCallback != null) {
-                    System.out.println("Running onFilterCallback with year=" + newYear + ", month=" + newMonth);
                     onFilterCallback.accept(newYear, newMonth);
+                } else {
                 }
             });
 
@@ -123,6 +123,12 @@ public class LogEditorUI {
             stage.initOwner(owner);
             stage.setTitle("Work Log Editor - Filtered View");
             stage.setScene(new Scene(root));
+            
+            // Make resizable with minimum size
+            stage.setResizable(true);
+            stage.setMinWidth(600);
+            stage.setMinHeight(400);
+            
             stage.show();
 
         } catch (IOException e) {

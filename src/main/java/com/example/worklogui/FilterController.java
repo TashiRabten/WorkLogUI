@@ -20,7 +20,6 @@ public class FilterController {
     
     private final CompanyManagerService service;
     private Consumer<String> statusMessageHandler;
-    private Consumer<String> warningMessageHandler;
     private Runnable onFilterAppliedCallback;
     
     private Map<String, List<String>> yearToMonthsMap = new HashMap<>();
@@ -65,7 +64,7 @@ public class FilterController {
      * Set callback for warning messages
      */
     public void setWarningMessageHandler(Consumer<String> handler) {
-        this.warningMessageHandler = handler;
+        // Warning message handler removed as it was unused
     }
     
     /**
@@ -155,6 +154,7 @@ public class FilterController {
     public void onApplyFilter() {
         if (onFilterAppliedCallback != null) {
             onFilterAppliedCallback.run();
+        } else {
         }
     }
     

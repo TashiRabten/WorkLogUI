@@ -37,7 +37,20 @@ public class ValidationHelper {
      * Validate work log entry data
      */
     public static WorkLogValidationResult validateWorkLogEntry(String dateString, String company, String timeValue) {
-        // Check for null or empty fields
+        WorkLogValidationResult fieldsValidation = validateRequiredFields(dateString, company, timeValue);
+        if (!fieldsValidation.isValid()) {
+            return fieldsValidation;
+        }
+
+        WorkLogValidationResult dateValidation = validateDateFormat(dateString);
+        if (!dateValidation.isValid()) {
+            return dateValidation;
+        }
+
+        return validateTimeValue(timeValue, company);
+    }
+
+    private static WorkLogValidationResult validateRequiredFields(String dateString, String company, String timeValue) {
         if (dateString == null || dateString.trim().isEmpty()) {
             return WorkLogValidationResult.error("Date is required.\nData é obrigatória.");
         }
@@ -50,35 +63,41 @@ public class ValidationHelper {
             return WorkLogValidationResult.error("Time value is required.\nValor do tempo é obrigatório.");
         }
 
-        // Validate date format
+        return WorkLogValidationResult.success();
+    }
+
+    private static WorkLogValidationResult validateDateFormat(String dateString) {
         if (!DateUtils.isValidDateString(dateString)) {
             return WorkLogValidationResult.error("Invalid date format. Use MM/dd/yyyy.\nFormato de data inválido. Use MM/dd/aaaa.");
         }
+        return WorkLogValidationResult.success();
+    }
 
-        // Validate time value
+    private static WorkLogValidationResult validateTimeValue(String timeValue, String company) {
         try {
             double value = Double.parseDouble(timeValue.trim());
             if (value < 0) {
                 return WorkLogValidationResult.error("Time value must be positive.\nValor do tempo deve ser positivo.");
             }
 
-            // Get the rate type for this company to determine validation limits
-            RateInfo rateInfo = CompanyRateService.getInstance().getRateInfoMap().get(company);
-            String rateType = rateInfo != null ? rateInfo.getTipo() : "hour";
-
-            if ("minuto".equalsIgnoreCase(rateType)) {
-                // For minute-based rates, allow up to 24 hours worth of minutes (1440 minutes)
-                if (value > 1440) {
-                    return WorkLogValidationResult.error("Minutes cannot exceed 1440 (24 hours).\nMinutos não podem exceder 1440 (24 horas).");
-                }
-            } else {
-                // For hour-based rates, keep the 24-hour limit
-                if (value > 24) {
-                    return WorkLogValidationResult.error("Hours cannot exceed 24.\nHoras não podem exceder 24.");
-                }
-            }
+            return validateTimeValueLimits(value, company);
         } catch (NumberFormatException e) {
             return WorkLogValidationResult.error("Invalid time value. Please enter a number.\nValor de tempo inválido. Digite um número.");
+        }
+    }
+
+    private static WorkLogValidationResult validateTimeValueLimits(double value, String company) {
+        RateInfo rateInfo = CompanyRateService.getInstance().getRateInfoMap().get(company);
+        String rateType = rateInfo != null ? rateInfo.getTipo() : "hour";
+
+        if ("minuto".equalsIgnoreCase(rateType)) {
+            if (value > 1440) {
+                return WorkLogValidationResult.error("Minutes cannot exceed 1440 (24 hours).\nMinutos não podem exceder 1440 (24 horas).");
+            }
+        } else {
+            if (value > 24) {
+                return WorkLogValidationResult.error("Hours cannot exceed 24.\nHoras não podem exceder 24.");
+            }
         }
 
         return WorkLogValidationResult.success();
@@ -88,6 +107,20 @@ public class ValidationHelper {
      * Validate bill entry data
      */
     public static WorkLogValidationResult validateBillEntry(String dateString, String description, String amountValue) {
+        WorkLogValidationResult fieldsValidation = validateBillRequiredFields(dateString, description, amountValue);
+        if (!fieldsValidation.isValid()) {
+            return fieldsValidation;
+        }
+
+        WorkLogValidationResult dateValidation = validateDateFormat(dateString);
+        if (!dateValidation.isValid()) {
+            return dateValidation;
+        }
+
+        return validateAmount(amountValue);
+    }
+
+    private static WorkLogValidationResult validateBillRequiredFields(String dateString, String description, String amountValue) {
         if (dateString == null || dateString.trim().isEmpty()) {
             return WorkLogValidationResult.error("Date is required.\nData é obrigatória.");
         }
@@ -100,26 +133,34 @@ public class ValidationHelper {
             return WorkLogValidationResult.error("Amount is required.\nValor é obrigatório.");
         }
 
-        if (!DateUtils.isValidDateString(dateString)) {
-            return WorkLogValidationResult.error("Invalid date format. Use MM/dd/yyyy.\nFormato de data inválido. Use MM/dd/aaaa.");
-        }
+        return WorkLogValidationResult.success();
+    }
 
+    private static WorkLogValidationResult validateAmount(String amountValue) {
         try {
             double amount = Double.parseDouble(amountValue.trim());
             if (amount <= 0) {
                 return WorkLogValidationResult.error("Amount must be greater than 0.\nValor deve ser maior que 0.");
             }
+            return WorkLogValidationResult.success();
         } catch (NumberFormatException e) {
             return WorkLogValidationResult.error("Invalid amount. Please enter a number.\nValor inválido. Digite um número.");
         }
-
-        return WorkLogValidationResult.success();
     }
 
     /**
      * Validate company rate data
      */
     public static WorkLogValidationResult validateCompanyRate(String name, String rateValue, String type) {
+        WorkLogValidationResult fieldsValidation = validateCompanyRateFields(name, rateValue, type);
+        if (!fieldsValidation.isValid()) {
+            return fieldsValidation;
+        }
+
+        return validateRateValue(rateValue);
+    }
+
+    private static WorkLogValidationResult validateCompanyRateFields(String name, String rateValue, String type) {
         if (name == null || name.trim().isEmpty()) {
             return WorkLogValidationResult.error("Company name is required.\nNome da empresa é obrigatório.");
         }
@@ -132,16 +173,19 @@ public class ValidationHelper {
             return WorkLogValidationResult.error("Invalid rate type.\nTipo de taxa inválido.");
         }
 
+        return WorkLogValidationResult.success();
+    }
+
+    private static WorkLogValidationResult validateRateValue(String rateValue) {
         try {
             double rate = Double.parseDouble(rateValue.trim());
             if (rate <= 0) {
                 return WorkLogValidationResult.error("Rate must be greater than 0.\nTaxa deve ser maior que 0.");
             }
+            return WorkLogValidationResult.success();
         } catch (NumberFormatException e) {
             return WorkLogValidationResult.error("Invalid rate value.\nValor de taxa inválido.");
         }
-
-        return WorkLogValidationResult.success();
     }
 
     /**

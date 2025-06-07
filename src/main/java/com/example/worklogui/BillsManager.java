@@ -22,7 +22,6 @@ public class BillsManager {
     private Consumer<String> statusMessageHandler;
     private Consumer<String> warningMessageHandler;
     private Runnable onBillsUpdatedCallback;
-    private BiConsumer<String, String> filterSetterCallback;
     private String lastEditedYear;
     private String lastEditedMonth;
 
@@ -152,10 +151,6 @@ public class BillsManager {
                 parentStage, this::filterToEditedBill).show();
     }
 
-    // Add this method
-    public void setFilterSetterCallback(BiConsumer<String, String> callback) {
-        this.filterSetterCallback = callback;
-    }
 
     private void filterToEditedBill(String editedYear, String editedMonth) {
         try {

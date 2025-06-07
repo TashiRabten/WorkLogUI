@@ -14,23 +14,19 @@ import javafx.stage.StageStyle;
  */
 public class ProgressDialog extends Stage {
     
-    private final ProgressBar progressBar;
-    private final Label messageLabel;
-    private final Task<?> task;
-    
     public ProgressDialog(Task<?> task) {
-        this.task = task;
-        
         initModality(Modality.APPLICATION_MODAL);
         initStyle(StageStyle.UTILITY);
-        setResizable(false);
+        setResizable(true);
+        setMinWidth(320);
+        setMinHeight(150);
         
-        // Create UI components
-        progressBar = new ProgressBar();
+        // Create UI components locally
+        ProgressBar progressBar = new ProgressBar();
         progressBar.setPrefWidth(300);
         progressBar.progressProperty().bind(task.progressProperty());
         
-        messageLabel = new Label();
+        Label messageLabel = new Label();
         messageLabel.textProperty().bind(task.messageProperty());
         
         Button cancelButton = new Button("Cancel");
