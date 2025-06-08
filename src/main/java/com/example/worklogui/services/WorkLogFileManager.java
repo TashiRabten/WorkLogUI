@@ -274,13 +274,25 @@ public class WorkLogFileManager {
         if (log1 == log2) return true;
         if (log1 == null || log2 == null) return false;
 
+        return areBasicFieldsEqual(log1, log2) && 
+               areTimeFieldsEqual(log1, log2) && 
+               arePaymentFieldsEqual(log1, log2);
+    }
+
+    private boolean areBasicFieldsEqual(RegistroTrabalho log1, RegistroTrabalho log2) {
         return java.util.Objects.equals(log1.getData(), log2.getData()) &&
-                java.util.Objects.equals(log1.getEmpresa(), log2.getEmpresa()) &&
-                Double.compare(log1.getHoras(), log2.getHoras()) == 0 &&
-                Double.compare(log1.getMinutos(), log2.getMinutos()) == 0 &&
-                log1.isPagamentoDobrado() == log2.isPagamentoDobrado() &&
-                Double.compare(log1.getTaxaUsada(), log2.getTaxaUsada()) == 0 &&
-                java.util.Objects.equals(log1.getTipoUsado(), log2.getTipoUsado());
+               java.util.Objects.equals(log1.getEmpresa(), log2.getEmpresa());
+    }
+
+    private boolean areTimeFieldsEqual(RegistroTrabalho log1, RegistroTrabalho log2) {
+        return Double.compare(log1.getHoras(), log2.getHoras()) == 0 &&
+               Double.compare(log1.getMinutos(), log2.getMinutos()) == 0;
+    }
+
+    private boolean arePaymentFieldsEqual(RegistroTrabalho log1, RegistroTrabalho log2) {
+        return log1.isPagamentoDobrado() == log2.isPagamentoDobrado() &&
+               Double.compare(log1.getTaxaUsada(), log2.getTaxaUsada()) == 0 &&
+               java.util.Objects.equals(log1.getTipoUsado(), log2.getTipoUsado());
     }
 
     /**

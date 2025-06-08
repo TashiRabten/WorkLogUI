@@ -12,6 +12,7 @@ import javafx.stage.Stage;
 
 import java.time.LocalDate;
 import java.util.*;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
@@ -32,6 +33,7 @@ public class LogTableController {
     private ObservableList<DisplayEntry> displayEntries = FXCollections.observableArrayList();
     private Consumer<String> statusMessageHandler;
     private FilterController filterController;
+    private BiConsumer<String, String> filterUpdateCallback;
 
 
     public LogTableController(CompanyManagerService service) {
@@ -40,6 +42,10 @@ public class LogTableController {
 
     public void setFilterController(FilterController filterController) {
         this.filterController = filterController;
+    }
+    
+    public void setFilterUpdateCallback(BiConsumer<String, String> filterUpdateCallback) {
+        this.filterUpdateCallback = filterUpdateCallback;
     }
     /**
      * Set up table columns and event handlers
@@ -266,6 +272,73 @@ public class LogTableController {
             logTable.scrollTo(newestBill);
         }
     }
+    
+    public void scrollToMostRecentWorkLog() {
+        if (logTable.getItems().isEmpty()) return;
+
+        // Get the last entry in the table (which should be the most recently added due to sorting)
+        DisplayEntry lastEntry = null;
+        for (int i = logTable.getItems().size() - 1; i >= 0; i--) {
+            DisplayEntry entry = logTable.getItems().get(i);
+            if (!entry.isBill()) {
+                lastEntry = entry;
+                break;
+            }
+        }
+
+        if (lastEntry != null) {
+            logTable.getSelectionModel().select(lastEntry);
+            logTable.scrollTo(lastEntry);
+            logTable.requestFocus();
+        }
+    }
+    
+    public void scrollToAndHighlightWorkLog(String date, String company, double hours, double minutes, boolean doublePay) {
+        if (logTable.getItems().isEmpty()) return;
+
+        for (DisplayEntry entry : logTable.getItems()) {
+            if (!entry.isBill() && entry.getRegistro() != null) {
+                RegistroTrabalho registro = entry.getRegistro();
+                if (registro.getData().equals(date) &&
+                    registro.getEmpresa().equals(company) &&
+                    Double.compare(registro.getHoras(), hours) == 0 &&
+                    Double.compare(registro.getMinutos(), minutes) == 0 &&
+                    registro.isPagamentoDobrado() == doublePay) {
+                    
+                    logTable.getSelectionModel().select(entry);
+                    logTable.scrollTo(entry);
+                    logTable.requestFocus();
+                    break;
+                }
+            }
+        }
+    }
+    
+    /**
+     * Scroll to and highlight a specific work log entry based on the RegistroTrabalho object
+     */
+    public void scrollToAndHighlightSpecificWorkLog(RegistroTrabalho target) {
+        if (logTable.getItems().isEmpty() || target == null) return;
+
+        for (DisplayEntry entry : logTable.getItems()) {
+            if (!entry.isBill() && entry.getRegistro() != null) {
+                RegistroTrabalho registro = entry.getRegistro();
+                // Use object equality first, then fallback to data comparison
+                if (registro == target || 
+                    (registro.getData().equals(target.getData()) &&
+                     registro.getEmpresa().equals(target.getEmpresa()) &&
+                     Double.compare(registro.getHoras(), target.getHoras()) == 0 &&
+                     Double.compare(registro.getMinutos(), target.getMinutos()) == 0 &&
+                     registro.isPagamentoDobrado() == target.isPagamentoDobrado())) {
+                    
+                    logTable.getSelectionModel().select(entry);
+                    logTable.scrollTo(entry);
+                    logTable.requestFocus();
+                    break;
+                }
+            }
+        }
+    }
 
     public void onEditLogEntry() {
         DisplayEntry selected = logTable.getSelectionModel().getSelectedItem();
@@ -276,6 +349,10 @@ public class LogTableController {
 
         // Open log editor with current filter settings
         LogEditorUI editor = new LogEditorUI();
+        
+        // Use the same unified filter update callback as bills editor
+        editor.setOnFilterCallback(filterUpdateCallback);
+        
         editor.setOnClose(() -> {
             try {
                 service.reloadRegistros();
@@ -286,7 +363,6 @@ public class LogTableController {
         });
 
         // Pass the current filter values
-
         String year = filterController.getSelectedYear();
         String month = filterController.getSelectedMonth();
         String company = filterController.getSelectedCompany();

@@ -248,48 +248,55 @@ public class WarningUtils {
     // NEW: Overloaded method that accepts service parameter - this is the main implementation
     public static String generateFilteredWarning(List<RegistroTrabalho> registros, String selectedYear,
                                                  String selectedMonth, CompanyManagerService service) {
-        // If "All" is selected for either year or month, we can't show a meaningful warning
-        if ("All".equalsIgnoreCase(selectedYear) || "All".equalsIgnoreCase(selectedMonth)) {
+        if (!isValidFilterSelection(selectedYear, selectedMonth)) {
             return null;
         }
 
         int year = Integer.parseInt(selectedYear);
         int month = Integer.parseInt(selectedMonth);
-        double sgaLimit = AGICalculator.getSGALimit(year);
+        
+        return calculateWarningForMonth(registros, year, month, service);
+    }
+
+    private static boolean isValidFilterSelection(String selectedYear, String selectedMonth) {
+        return !("All".equalsIgnoreCase(selectedYear) || "All".equalsIgnoreCase(selectedMonth));
+    }
+
+    private static String calculateWarningForMonth(List<RegistroTrabalho> registros, int year, int month, CompanyManagerService service) {
+        if (service == null) {
+            System.err.println("Service is null, cannot generate filtered warning");
+            return null;
+        }
 
         try {
-            // Use the provided service - this is crucial for proper operation
-            if (service == null) {
-                System.err.println("Service is null, cannot generate filtered warning");
-                return null;
-            }
-
+            double sgaLimit = AGICalculator.getSGALimit(year);
             String yearMonth = String.format("%d-%02d", year, month);
             List<Bill> monthBills = service.getBillsForMonth(yearMonth);
-
-            // Filter registros for the selected month
-            List<RegistroTrabalho> monthRegistros = new ArrayList<>();
-            for (RegistroTrabalho r : registros) {
-                try {
-                    LocalDate date = LocalDate.parse(r.getData(), DATE_FORMATTER);
-                    if (date.getYear() == year && date.getMonthValue() == month) {
-                        monthRegistros.add(r);
-                    }
-                } catch (Exception e) {
-                    // Skip invalid dates
-                }
-            }
-
-            // Calculate AGI - specify that data is monthly
+            
+            List<RegistroTrabalho> monthRegistros = filterRegistrosForMonth(registros, year, month);
             AGICalculator.AGIResult result = AGICalculator.calculateAGI(monthRegistros, monthBills, true);
-            double monthlyNESE = result.monthlySSACountableIncome;
-
+            
             String context = String.format("%02d/%d", month, year);
-            return generateWarningMessage(monthlyNESE, sgaLimit, context);
+            return generateWarningMessage(result.monthlySSACountableIncome, sgaLimit, context);
         } catch (Exception e) {
             System.err.println("Error generating filtered warning: " + e.getMessage());
             e.printStackTrace();
             return null;
         }
+    }
+
+    private static List<RegistroTrabalho> filterRegistrosForMonth(List<RegistroTrabalho> registros, int year, int month) {
+        List<RegistroTrabalho> monthRegistros = new ArrayList<>();
+        for (RegistroTrabalho r : registros) {
+            try {
+                LocalDate date = LocalDate.parse(r.getData(), DATE_FORMATTER);
+                if (date.getYear() == year && date.getMonthValue() == month) {
+                    monthRegistros.add(r);
+                }
+            } catch (Exception e) {
+                // Skip invalid dates
+            }
+        }
+        return monthRegistros;
     }
 }

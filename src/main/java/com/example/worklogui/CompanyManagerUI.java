@@ -107,6 +107,7 @@ public class CompanyManagerUI {
         logTableController.setupControls(logTable, dateCol, companyCol, hoursCol, minutesCol, doublePayCol, earningsCol, netTotalLabel);
         logTableController.setStatusMessageHandler(statusManager::setStatusMessage);
         logTableController.setFilterController(filterController);
+        logTableController.setFilterUpdateCallback(this::updateFiltersWithYearMonth);
         
         // Set table column resize policy to prevent empty columns
         logTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
@@ -155,17 +156,36 @@ public class CompanyManagerUI {
 
             // Apply the filter
             onApplyFilter();
+            
+            // Highlight the newly added work log entry using the specific entry
+            RegistroTrabalho addedEntry = workLogEntryController.getLastAddedEntry();
+            Platform.runLater(() -> {
+                if (addedEntry != null) {
+                    logTableController.scrollToAndHighlightSpecificWorkLog(addedEntry);
+                } else {
+                    logTableController.scrollToMostRecentWorkLog();
+                }
+            });
         } else {
             // Fallback to old behavior if no date available - but still reload
             filterController.refreshYearToMonthsMap();
             filterController.updateYearFilterItems();
             filterController.updateMonthFilter();
             onApplyFilter();
+            
+            // Highlight the most recent work log entry
+            RegistroTrabalho addedEntry = workLogEntryController.getLastAddedEntry();
+            Platform.runLater(() -> {
+                if (addedEntry != null) {
+                    logTableController.scrollToAndHighlightSpecificWorkLog(addedEntry);
+                } else {
+                    logTableController.scrollToMostRecentWorkLog();
+                }
+            });
         }
     }
     private void updateFiltersWithYearMonth(String year, String month) {
         try {
-
             // Reload data first to ensure we have the latest changes
             service.reloadRegistros();
 
@@ -178,8 +198,13 @@ public class CompanyManagerUI {
             // Set the filter values to the new date
             filterController.setFilterValues(year, month, "All");
 
-            // Apply the filter
+            // Apply the filter (synchronously like bills editor does)
             onApplyFilter();
+            
+            // Highlight the most recent work log entry after edit
+            Platform.runLater(() -> {
+                logTableController.scrollToMostRecentWorkLog();
+            });
 
         } catch (Exception e) {
             System.err.println("Error updating filters: " + e.getMessage());
@@ -380,6 +405,21 @@ public class CompanyManagerUI {
             statusManager.setStatusMessage("🔄 Updating filters after edit...\n🔄 Atualizando filtros após edição...");
             updateFiltersWithYearMonth(year, month);
             statusManager.setStatusMessage("✅ Filters updated to new date.\n✅ Filtros atualizados para nova data.");
+        });
+        
+        // Set callback for when an entry is edited (but date doesn't change)
+        editor.setOnEntryEditedCallback((editedEntry) -> {
+            Platform.runLater(() -> {
+                // Reload data to reflect changes
+                try {
+                    service.reloadRegistros();
+                    onApplyFilter(); // Refresh the table
+                    // Highlight the edited entry in the main table
+                    logTableController.scrollToAndHighlightSpecificWorkLog(editedEntry);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            });
         });
 
         // The regular close callback (for when filter callback isn't triggered)

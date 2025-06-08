@@ -23,6 +23,7 @@ public class LogEditorUI {
 
     private Runnable onCloseCallback;
     private BiConsumer<String, String> onFilterCallback;
+    private java.util.function.Consumer<RegistroTrabalho> onEntryEditedCallback;
     private CompanyManagerService service;
 
     /**
@@ -44,6 +45,13 @@ public class LogEditorUI {
      */
     public void setOnFilterCallback(BiConsumer<String, String> callback) {
         this.onFilterCallback = callback;
+    }
+    
+    /**
+     * Set the callback for when an entry is edited (but date doesn't change)
+     */
+    public void setOnEntryEditedCallback(java.util.function.Consumer<RegistroTrabalho> callback) {
+        this.onEntryEditedCallback = callback;
     }
 
     /**
@@ -111,9 +119,19 @@ public class LogEditorUI {
 
             // Set filter callback for updating filter dropdowns with new years/months
             controller.setOnFilterCallback((newYear, newMonth) -> {
+                System.out.println("DEBUG: LogEditorUI filter callback called with year=" + newYear + ", month=" + newMonth);
                 if (onFilterCallback != null) {
+                    System.out.println("DEBUG: Calling parent filter callback");
                     onFilterCallback.accept(newYear, newMonth);
                 } else {
+                    System.out.println("DEBUG: No parent filter callback set");
+                }
+            });
+            
+            // Set entry edited callback for highlighting edited entries
+            controller.setOnEntryEditedCallback((editedEntry) -> {
+                if (onEntryEditedCallback != null) {
+                    onEntryEditedCallback.accept(editedEntry);
                 }
             });
 

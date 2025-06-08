@@ -27,6 +27,7 @@ public class WorkLogEntryController {
     // Track last added entry for filter updates
     private LocalDate lastAddedEntryDate;
     private String lastAddedCompany;
+    private RegistroTrabalho lastAddedEntry;
 
     public WorkLogEntryController(CompanyManagerService service) {
         this.service = service;
@@ -125,6 +126,7 @@ public class WorkLogEntryController {
             // Track the entry for filter updates
             lastAddedEntryDate = parsedDate;
             lastAddedCompany = empresa;
+            lastAddedEntry = newEntry;
 
             // Clear input fields
             valueField.clear();
@@ -158,6 +160,10 @@ public class WorkLogEntryController {
 
     public String getLastAddedCompany() {
         return lastAddedCompany;
+    }
+    
+    public RegistroTrabalho getLastAddedEntry() {
+        return lastAddedEntry;
     }
 
     private void setStatusMessage(String message) {

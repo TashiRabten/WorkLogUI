@@ -93,6 +93,7 @@ public class FilterController {
      */
     public void updateMonthFilter() {
         String selectedYear = yearFilter.getValue();
+        
         if (selectedYear == null || "All".equals(selectedYear) || !yearToMonthsMap.containsKey(selectedYear)) {
             monthFilter.setItems(FXCollections.observableArrayList("All"));
             monthFilter.setValue("All");
@@ -104,9 +105,12 @@ public class FilterController {
         List<String> months = new ArrayList<>();
         months.add("All");
         months.addAll(availableMonths);
+        
         monthFilter.setItems(FXCollections.observableArrayList(months));
         
-        if (!months.contains(monthFilter.getValue())) {
+        String currentMonthValue = monthFilter.getValue();
+        
+        if (!months.contains(currentMonthValue)) {
             monthFilter.setValue("All");
         }
     }
@@ -154,7 +158,6 @@ public class FilterController {
     public void onApplyFilter() {
         if (onFilterAppliedCallback != null) {
             onFilterAppliedCallback.run();
-        } else {
         }
     }
     

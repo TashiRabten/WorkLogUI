@@ -193,46 +193,78 @@ public class WorkLogBusinessService {
      * Gets summary by month and year
      */
     public String getSummaryByMonthAndYear() {
-        Map<String, Double> monthTotals = new java.util.TreeMap<>();
-        Map<String, Double> yearTotals = new java.util.TreeMap<>();
-
         try {
             List<RegistroTrabalho> allLogs = fileManager.getAllWorkLogs();
-            for (RegistroTrabalho r : allLogs) {
-                try {
-                    LocalDate date = DateUtils.parseDisplayDate(r.getData());
-                    String year = String.valueOf(date.getYear());
-                    String monthKey = DateUtils.getYearMonthKey(date);
-                    double earnings = calculateEarnings(r);
-
-                    monthTotals.put(monthKey, monthTotals.getOrDefault(monthKey, 0.0) + earnings);
-                    yearTotals.put(year, yearTotals.getOrDefault(year, 0.0) + earnings);
-                } catch (Exception ignored) {}
-            }
+            SummaryTotals totals = calculateTotalsFromLogs(allLogs);
+            return buildSummaryReport(totals.monthTotals, totals.yearTotals);
         } catch (Exception e) {
             ErrorHandler.handleUnexpectedError("calculating summary", e);
             return "Error calculating summary: " + e.getMessage();
         }
+    }
 
-        StringBuilder sb = new StringBuilder("📆 Year-Month Summary:\n\n");
-        String currentYear = "";
-        for (String monthKey : monthTotals.keySet()) {
-            String year = DateUtils.getYearFromKey(monthKey);
-            if (year != null && !year.equals(currentYear)) {
-                if (!currentYear.isEmpty()) {
-                    sb.append(String.format("%s Grand Total → $%.2f\n\n", currentYear, yearTotals.get(currentYear)));
-                }
-                currentYear = year;
-                sb.append("📅 ").append(year).append("\n-------------------\n");
-            }
-            sb.append(String.format("%s → $%.2f\n-----------------------\n", monthKey, monthTotals.get(monthKey)));
+    private SummaryTotals calculateTotalsFromLogs(List<RegistroTrabalho> allLogs) {
+        Map<String, Double> monthTotals = new java.util.TreeMap<>();
+        Map<String, Double> yearTotals = new java.util.TreeMap<>();
+
+        for (RegistroTrabalho r : allLogs) {
+            try {
+                LocalDate date = DateUtils.parseDisplayDate(r.getData());
+                String year = String.valueOf(date.getYear());
+                String monthKey = DateUtils.getYearMonthKey(date);
+                double earnings = calculateEarnings(r);
+
+                monthTotals.put(monthKey, monthTotals.getOrDefault(monthKey, 0.0) + earnings);
+                yearTotals.put(year, yearTotals.getOrDefault(year, 0.0) + earnings);
+            } catch (Exception ignored) {}
         }
 
+        return new SummaryTotals(monthTotals, yearTotals);
+    }
+
+    private String buildSummaryReport(Map<String, Double> monthTotals, Map<String, Double> yearTotals) {
+        StringBuilder sb = new StringBuilder("📆 Year-Month Summary:\n\n");
+        String currentYear = "";
+        
+        for (String monthKey : monthTotals.keySet()) {
+            String year = DateUtils.getYearFromKey(monthKey);
+            currentYear = appendYearSectionIfNeeded(sb, year, currentYear, yearTotals);
+            appendMonthEntry(sb, monthKey, monthTotals.get(monthKey));
+        }
+
+        appendFinalYearTotal(sb, currentYear, yearTotals);
+        return sb.toString();
+    }
+
+    private String appendYearSectionIfNeeded(StringBuilder sb, String year, String currentYear, Map<String, Double> yearTotals) {
+        if (year != null && !year.equals(currentYear)) {
+            if (!currentYear.isEmpty()) {
+                sb.append(String.format("%s Grand Total → $%.2f\n\n", currentYear, yearTotals.get(currentYear)));
+            }
+            sb.append("📅 ").append(year).append("\n-------------------\n");
+            return year;
+        }
+        return currentYear;
+    }
+
+    private void appendMonthEntry(StringBuilder sb, String monthKey, Double monthTotal) {
+        sb.append(String.format("%s → $%.2f\n-----------------------\n", monthKey, monthTotal));
+    }
+
+    private void appendFinalYearTotal(StringBuilder sb, String currentYear, Map<String, Double> yearTotals) {
         if (!currentYear.isEmpty()) {
             sb.append(String.format("%s Grand Total → $%.2f\n", currentYear, yearTotals.get(currentYear)));
         }
+    }
 
-        return sb.toString();
+    private static class SummaryTotals {
+        final Map<String, Double> monthTotals;
+        final Map<String, Double> yearTotals;
+
+        SummaryTotals(Map<String, Double> monthTotals, Map<String, Double> yearTotals) {
+            this.monthTotals = monthTotals;
+            this.yearTotals = yearTotals;
+        }
     }
     
     /**
