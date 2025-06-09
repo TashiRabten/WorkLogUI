@@ -296,22 +296,41 @@ public class LogTableController {
     public void scrollToAndHighlightWorkLog(String date, String company, double hours, double minutes, boolean doublePay) {
         if (logTable.getItems().isEmpty()) return;
 
+        DisplayEntry matchingEntry = findWorkLogEntry(date, company, hours, minutes, doublePay);
+        if (matchingEntry != null) {
+            highlightEntry(matchingEntry);
+        }
+    }
+    
+    private DisplayEntry findWorkLogEntry(String date, String company, double hours, double minutes, boolean doublePay) {
         for (DisplayEntry entry : logTable.getItems()) {
-            if (!entry.isBill() && entry.getRegistro() != null) {
+            if (isWorkLogEntry(entry)) {
                 RegistroTrabalho registro = entry.getRegistro();
-                if (registro.getData().equals(date) &&
-                    registro.getEmpresa().equals(company) &&
-                    Double.compare(registro.getHoras(), hours) == 0 &&
-                    Double.compare(registro.getMinutos(), minutes) == 0 &&
-                    registro.isPagamentoDobrado() == doublePay) {
-                    
-                    logTable.getSelectionModel().select(entry);
-                    logTable.scrollTo(entry);
-                    logTable.requestFocus();
-                    break;
+                if (matchesWorkLogData(registro, date, company, hours, minutes, doublePay)) {
+                    return entry;
                 }
             }
         }
+        return null;
+    }
+    
+    private boolean isWorkLogEntry(DisplayEntry entry) {
+        return !entry.isBill() && entry.getRegistro() != null;
+    }
+    
+    private boolean matchesWorkLogData(RegistroTrabalho registro, String date, String company, 
+                                      double hours, double minutes, boolean doublePay) {
+        return registro.getData().equals(date) &&
+               registro.getEmpresa().equals(company) &&
+               Double.compare(registro.getHoras(), hours) == 0 &&
+               Double.compare(registro.getMinutos(), minutes) == 0 &&
+               registro.isPagamentoDobrado() == doublePay;
+    }
+    
+    private void highlightEntry(DisplayEntry entry) {
+        logTable.getSelectionModel().select(entry);
+        logTable.scrollTo(entry);
+        logTable.requestFocus();
     }
     
     /**
@@ -320,24 +339,34 @@ public class LogTableController {
     public void scrollToAndHighlightSpecificWorkLog(RegistroTrabalho target) {
         if (logTable.getItems().isEmpty() || target == null) return;
 
+        DisplayEntry matchingEntry = findSpecificWorkLogEntry(target);
+        if (matchingEntry != null) {
+            highlightEntry(matchingEntry);
+        }
+    }
+    
+    private DisplayEntry findSpecificWorkLogEntry(RegistroTrabalho target) {
         for (DisplayEntry entry : logTable.getItems()) {
-            if (!entry.isBill() && entry.getRegistro() != null) {
+            if (isWorkLogEntry(entry)) {
                 RegistroTrabalho registro = entry.getRegistro();
-                // Use object equality first, then fallback to data comparison
-                if (registro == target || 
-                    (registro.getData().equals(target.getData()) &&
-                     registro.getEmpresa().equals(target.getEmpresa()) &&
-                     Double.compare(registro.getHoras(), target.getHoras()) == 0 &&
-                     Double.compare(registro.getMinutos(), target.getMinutos()) == 0 &&
-                     registro.isPagamentoDobrado() == target.isPagamentoDobrado())) {
-                    
-                    logTable.getSelectionModel().select(entry);
-                    logTable.scrollTo(entry);
-                    logTable.requestFocus();
-                    break;
+                if (matchesTargetWorkLog(registro, target)) {
+                    return entry;
                 }
             }
         }
+        return null;
+    }
+    
+    private boolean matchesTargetWorkLog(RegistroTrabalho registro, RegistroTrabalho target) {
+        return registro == target || hasSameDataAsTarget(registro, target);
+    }
+    
+    private boolean hasSameDataAsTarget(RegistroTrabalho registro, RegistroTrabalho target) {
+        return registro.getData().equals(target.getData()) &&
+               registro.getEmpresa().equals(target.getEmpresa()) &&
+               Double.compare(registro.getHoras(), target.getHoras()) == 0 &&
+               Double.compare(registro.getMinutos(), target.getMinutos()) == 0 &&
+               registro.isPagamentoDobrado() == target.isPagamentoDobrado();
     }
 
     public void onEditLogEntry() {

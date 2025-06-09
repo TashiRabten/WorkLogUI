@@ -241,20 +241,38 @@ public class LogEditorController {
     @FXML
     public void onClose() {
         try {
-            // Try multiple approaches to close the window
-            if (rootContainer != null && rootContainer.getScene() != null && rootContainer.getScene().getWindow() != null) {
-                rootContainer.getScene().getWindow().hide();
-            } else if (logTable != null && logTable.getScene() != null && logTable.getScene().getWindow() != null) {
-                logTable.getScene().getWindow().hide();
-            } else {
-                // Last resort: try to find any stage that contains our components
-                if (closeBtn != null && closeBtn.getScene() != null && closeBtn.getScene().getWindow() != null) {
-                    closeBtn.getScene().getWindow().hide();
-                }
+            if (tryCloseFromRootContainer()) {
+                return;
             }
+            if (tryCloseFromLogTable()) {
+                return;
+            }
+            tryCloseFromCloseButton();
         } catch (Exception e) {
             // If all else fails, print error but don't crash
             System.err.println("Could not close log editor window: " + e.getMessage());
+        }
+    }
+    
+    private boolean tryCloseFromRootContainer() {
+        if (rootContainer != null && rootContainer.getScene() != null && rootContainer.getScene().getWindow() != null) {
+            rootContainer.getScene().getWindow().hide();
+            return true;
+        }
+        return false;
+    }
+    
+    private boolean tryCloseFromLogTable() {
+        if (logTable != null && logTable.getScene() != null && logTable.getScene().getWindow() != null) {
+            logTable.getScene().getWindow().hide();
+            return true;
+        }
+        return false;
+    }
+    
+    private void tryCloseFromCloseButton() {
+        if (closeBtn != null && closeBtn.getScene() != null && closeBtn.getScene().getWindow() != null) {
+            closeBtn.getScene().getWindow().hide();
         }
     }
 

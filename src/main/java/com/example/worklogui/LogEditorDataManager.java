@@ -2,7 +2,6 @@ package com.example.worklogui;
 
 import com.example.worklogui.exceptions.WorkLogNotFoundException;
 import com.example.worklogui.exceptions.WorkLogServiceException;
-import com.example.worklogui.services.WorkLogBusinessService;
 import com.example.worklogui.utils.DateUtils;
 import com.example.worklogui.utils.FilterHelper;
 import javafx.beans.property.SimpleStringProperty;
@@ -18,7 +17,6 @@ public class LogEditorDataManager {
     
     private List<RegistroTrabalho> registros = new ArrayList<>();
     private CompanyManagerService service;
-    private WorkLogBusinessService businessService;
     
     // Filter tracking
     private String currentFilterYear;
@@ -27,7 +25,6 @@ public class LogEditorDataManager {
     
     public void setService(CompanyManagerService service) {
         this.service = service;
-        this.businessService = new WorkLogBusinessService(service.getWorkLogFileManager());
     }
     
     public void setRegistros(List<RegistroTrabalho> registros) {
@@ -212,7 +209,7 @@ public class LogEditorDataManager {
             service.deleteRegistro(toDelete);
             registros.remove(selected);
         } else {
-            throw new Exception("Entry not found in current data - it may have been already deleted or modified");
+            throw new WorkLogNotFoundException("Entry not found in current data - it may have been already deleted or modified");
         }
     }
     

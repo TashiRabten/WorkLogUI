@@ -52,7 +52,7 @@ public class LogEditorCommands {
         TextField minutesField = (TextField) grid.getChildren().get(7);
         CheckBox doublePayBox = (CheckBox) grid.getChildren().get(8);
         
-        setupDialogResultConverter(dialog, datePicker, companyCombo, hoursField, minutesField, doublePayBox, saveButtonType);
+        setupDialogResultConverter(dialog, datePicker, companyCombo, hoursField, minutesField, doublePayBox, saveButtonType, entry);
         
         Optional<RegistroTrabalho> result = dialog.showAndWait();
         
@@ -74,7 +74,14 @@ public class LogEditorCommands {
         ComboBox<String> companyCombo = new ComboBox<>();
         Set<String> companies = dataManager.getService().getCompanies();
         companyCombo.getItems().addAll(companies);
-        companyCombo.setValue(entry.getEmpresa());
+        
+        // Don't pre-select the JSON company name - let user choose from local companies
+        // If the JSON company exists locally, pre-select it; otherwise leave empty for user selection
+        if (companies.contains(entry.getEmpresa())) {
+            companyCombo.setValue(entry.getEmpresa());
+        } else {
+            companyCombo.setPromptText("Select local company for: " + entry.getEmpresa());
+        }
         companyCombo.setEditable(true);
         
         TextField hoursField = new TextField(String.valueOf(entry.getHoras()));
@@ -103,57 +110,75 @@ public class LogEditorCommands {
     
     private void setupDialogResultConverter(Dialog<RegistroTrabalho> dialog, DatePicker datePicker,
                                           ComboBox<String> companyCombo, TextField hoursField, 
-                                          TextField minutesField, CheckBox doublePayBox, ButtonType saveButtonType) {
+                                          TextField minutesField, CheckBox doublePayBox, ButtonType saveButtonType, RegistroTrabalho originalEntry) {
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == saveButtonType) {
-                try {
-                    String dateStr = DateUtils.formatDisplayDate(datePicker.getValue());
-                    String company = companyCombo.getValue();
-                    double hours = Double.parseDouble(hoursField.getText());
-                    double minutes = Double.parseDouble(minutesField.getText());
-                    boolean doublePay = doublePayBox.isSelected();
-                    
-                    if (company == null || company.trim().isEmpty()) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Company name cannot be empty.");
-                        return null;
-                    }
-                    
-                    if (hours < 0 || minutes < 0) {
-                        showAlert(Alert.AlertType.ERROR, "Validation Error", "Hours and minutes must be non-negative.");
-                        return null;
-                    }
-                    
-                    // Get rate info for the company
-                    RateInfo info = CompanyRateService.getInstance().getRateInfoMap()
-                            .getOrDefault(company, new RateInfo(0.0, "hour"));
-                    
-                    RegistroTrabalho updatedEntry = new RegistroTrabalho();
-                    updatedEntry.setData(dateStr);
-                    updatedEntry.setEmpresa(company);
-                    updatedEntry.setPagamentoDobrado(doublePay);
-                    updatedEntry.setTaxaUsada(info.getValor());
-                    updatedEntry.setTipoUsado(info.getTipo());
-                    
-                    // Apply company rate type logic like in WorkLogBusinessService.createWorkLog()
-                    if (info.getTipo().equalsIgnoreCase("minuto")) {
-                        updatedEntry.setHoras(0);
-                        updatedEntry.setMinutos(minutes);
-                    } else {
-                        updatedEntry.setHoras(hours);
-                        updatedEntry.setMinutos(0);
-                    }
-                    
-                    return updatedEntry;
-                } catch (NumberFormatException e) {
-                    showAlert(Alert.AlertType.ERROR, "Validation Error", "Please enter valid numbers for hours and minutes.");
-                    return null;
-                } catch (Exception e) {
-                    showAlert(Alert.AlertType.ERROR, "Error", "An error occurred: " + e.getMessage());
-                    return null;
-                }
+                return createUpdatedEntryFromDialog(datePicker, companyCombo, hoursField, minutesField, doublePayBox, originalEntry);
             }
             return null;
         });
+    }
+    
+    private RegistroTrabalho createUpdatedEntryFromDialog(DatePicker datePicker, ComboBox<String> companyCombo,
+                                                         TextField hoursField, TextField minutesField,
+                                                         CheckBox doublePayBox, RegistroTrabalho originalEntry) {
+        try {
+            String dateStr = DateUtils.formatDisplayDate(datePicker.getValue());
+            String company = companyCombo.getValue();
+            double hours = Double.parseDouble(hoursField.getText());
+            double minutes = Double.parseDouble(minutesField.getText());
+            boolean doublePay = doublePayBox.isSelected();
+            
+            if (!validateDialogInput(company, hours, minutes)) {
+                return null;
+            }
+            
+            return buildUpdatedEntry(dateStr, company, hours, minutes, doublePay, originalEntry);
+        } catch (NumberFormatException e) {
+            showAlert(Alert.AlertType.ERROR, "Validation Error", "Please enter valid numbers for hours and minutes.");
+            return null;
+        } catch (Exception e) {
+            showAlert(Alert.AlertType.ERROR, "Error", "An error occurred: " + e.getMessage());
+            return null;
+        }
+    }
+    
+    private boolean validateDialogInput(String company, double hours, double minutes) {
+        if (company == null || company.trim().isEmpty()) {
+            showAlert(Alert.AlertType.ERROR, "Validation Error", "Company name cannot be empty.");
+            return false;
+        }
+        
+        if (hours < 0 || minutes < 0) {
+            showAlert(Alert.AlertType.ERROR, "Validation Error", "Hours and minutes must be non-negative.");
+            return false;
+        }
+        
+        return true;
+    }
+    
+    private RegistroTrabalho buildUpdatedEntry(String dateStr, String company, double hours, double minutes, boolean doublePay, RegistroTrabalho originalEntry) {
+        // Get the rate info for the selected company (user maps JSON company to local company)
+        RateInfo info = CompanyRateService.getInstance().getRateInfoMap()
+                .getOrDefault(company, new RateInfo(0.0, "hora"));
+        
+        RegistroTrabalho updatedEntry = new RegistroTrabalho();
+        updatedEntry.setData(dateStr);
+        updatedEntry.setEmpresa(company); // Use the selected local company name
+        updatedEntry.setPagamentoDobrado(doublePay);
+        updatedEntry.setTaxaUsada(info.getValor()); // Use the selected company's rate
+        updatedEntry.setTipoUsado(info.getTipo()); // Use the selected company's type
+        
+        // Apply the selected company's type logic to determine which field to use
+        if (info.getTipo().equalsIgnoreCase("minuto")) {
+            updatedEntry.setHoras(0);
+            updatedEntry.setMinutos(minutes); // Use the user-edited minutes value
+        } else {
+            updatedEntry.setHoras(hours); // Use the user-edited hours value
+            updatedEntry.setMinutos(0);
+        }
+        
+        return updatedEntry;
     }
     
     private void handleEditResult(RegistroTrabalho entry, RegistroTrabalho updatedEntry, LocalDate originalDate) {
@@ -219,42 +244,11 @@ public class LogEditorCommands {
         try {
             CompanyManagerService service = dataManager.getService();
             List<RegistroTrabalho> registros = dataManager.getRegistros();
-            int removedCount = 0;
             
             if (hasFilter) {
-                // Clear only filtered logs - create copy to avoid modification during iteration
-                List<RegistroTrabalho> logsToDelete = new ArrayList<>(registros);
-                removedCount = logsToDelete.size();
-                
-                for (RegistroTrabalho log : logsToDelete) {
-                    try {
-                        if (service != null) {
-                            service.deleteRegistro(log);
-                        }
-                    } catch (Exception e) {
-                        System.err.println("Failed to delete log: " + e.getMessage());
-                        removedCount--; // Reduce count if deletion failed
-                    }
-                }
-                // Clear the local list after all deletions
-                registros.clear();
+                clearFilteredLogs(service, registros);
             } else {
-                // Clear all logs
-                List<RegistroTrabalho> logsToDelete = new ArrayList<>(registros);
-                removedCount = logsToDelete.size();
-                
-                for (RegistroTrabalho log : logsToDelete) {
-                    try {
-                        if (service != null) {
-                            service.deleteRegistro(log);
-                        }
-                    } catch (Exception e) {
-                        System.err.println("Failed to delete log: " + e.getMessage());
-                        removedCount--; // Reduce count if deletion failed
-                    }
-                }
-                // Clear the local list after all deletions
-                registros.clear();
+                clearAllLogs(service, registros);
             }
             
             // Refresh table immediately
@@ -266,16 +260,49 @@ public class LogEditorCommands {
                 saveCallback.run();
             }
             
-            String message = hasFilter 
-                ? String.format("Cleared %d filtered entries.", removedCount)
-                : String.format("Cleared %d entries.", removedCount);
-            
-            showAlert(Alert.AlertType.INFORMATION, "Clear Complete", message);
-            
         } catch (Exception e) {
             ErrorHandler.handleUnexpectedError("Error clearing logs", e);
             showAlert(Alert.AlertType.ERROR, "Clear Failed", "Failed to clear logs: " + e.getMessage());
         }
+    }
+    
+    private void clearFilteredLogs(CompanyManagerService service, List<RegistroTrabalho> registros) {
+        List<RegistroTrabalho> logsToDelete = new ArrayList<>(registros);
+        int removedCount = deleteLogs(service, logsToDelete);
+        registros.clear();
+        showClearCompleteMessage(removedCount, true);
+    }
+    
+    private void clearAllLogs(CompanyManagerService service, List<RegistroTrabalho> registros) {
+        List<RegistroTrabalho> logsToDelete = new ArrayList<>(registros);
+        int removedCount = deleteLogs(service, logsToDelete);
+        registros.clear();
+        showClearCompleteMessage(removedCount, false);
+    }
+    
+    private int deleteLogs(CompanyManagerService service, List<RegistroTrabalho> logsToDelete) {
+        int removedCount = logsToDelete.size();
+        
+        for (RegistroTrabalho log : logsToDelete) {
+            try {
+                if (service != null) {
+                    service.deleteRegistro(log);
+                }
+            } catch (Exception e) {
+                System.err.println("Failed to delete log: " + e.getMessage());
+                removedCount--; // Reduce count if deletion failed
+            }
+        }
+        
+        return removedCount;
+    }
+    
+    private void showClearCompleteMessage(int removedCount, boolean hasFilter) {
+        String message = hasFilter 
+            ? String.format("Cleared %d filtered entries.", removedCount)
+            : String.format("Cleared %d entries.", removedCount);
+        
+        showAlert(Alert.AlertType.INFORMATION, "Clear Complete", message);
     }
     
     public void performDeleteInBackground(RegistroTrabalho selected) {
