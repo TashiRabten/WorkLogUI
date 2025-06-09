@@ -132,38 +132,15 @@ public class LogEditorDataManager {
     }
     
     public void clearFilteredLogs(AtomicInteger removedCount) throws Exception {
-        // Work with the current filtered logs displayed in the editor
-        List<RegistroTrabalho> logsToDelete = new ArrayList<>(registros);
-        int deletedCount = 0;
-        List<RegistroTrabalho> currentLogs = service.getRegistros();
-        
-        // Delete each filtered entry by finding matching entries in current data
-        for (RegistroTrabalho log : logsToDelete) {
-            try {
-                RegistroTrabalho toDelete = null;
-                for (RegistroTrabalho currentLog : currentLogs) {
-                    if (isSameEntry(currentLog, log)) {
-                        toDelete = currentLog;
-                        break;
-                    }
-                }
-                
-                if (toDelete != null) {
-                    service.deleteRegistro(toDelete);
-                    deletedCount++;
-                }
-            } catch (Exception e) {
-                // Log the error but continue with other deletions
-                System.err.println("Failed to delete entry: " + e.getMessage());
-            }
-        }
-        
-        removedCount.set(deletedCount);
-        registros.clear();
+        clearDisplayedLogs(removedCount);
     }
     
     public void clearAllLogs(AtomicInteger removedCount) throws Exception {
-        // Work with a copy of the current filtered logs to avoid concurrent modification
+        clearDisplayedLogs(removedCount);
+    }
+    
+    private void clearDisplayedLogs(AtomicInteger removedCount) throws Exception {
+        // Work with a copy of the current displayed logs to avoid concurrent modification
         List<RegistroTrabalho> logsToDelete = new ArrayList<>(registros);
         int deletedCount = 0;
         List<RegistroTrabalho> currentLogs = service.getRegistros();
@@ -171,14 +148,7 @@ public class LogEditorDataManager {
         // Delete each entry by finding matching entries in current data
         for (RegistroTrabalho log : logsToDelete) {
             try {
-                RegistroTrabalho toDelete = null;
-                for (RegistroTrabalho currentLog : currentLogs) {
-                    if (isSameEntry(currentLog, log)) {
-                        toDelete = currentLog;
-                        break;
-                    }
-                }
-                
+                RegistroTrabalho toDelete = findMatchingEntry(currentLogs, log);
                 if (toDelete != null) {
                     service.deleteRegistro(toDelete);
                     deletedCount++;
@@ -193,17 +163,19 @@ public class LogEditorDataManager {
         registros.clear();
     }
     
+    private RegistroTrabalho findMatchingEntry(List<RegistroTrabalho> currentLogs, RegistroTrabalho target) {
+        for (RegistroTrabalho currentLog : currentLogs) {
+            if (isSameEntry(currentLog, target)) {
+                return currentLog;
+            }
+        }
+        return null;
+    }
+    
     public void deleteEntry(RegistroTrabalho selected) throws Exception {
         // Find the entry in the current service data by matching key fields
         List<RegistroTrabalho> currentLogs = service.getRegistros();
-        RegistroTrabalho toDelete = null;
-        
-        for (RegistroTrabalho log : currentLogs) {
-            if (isSameEntry(log, selected)) {
-                toDelete = log;
-                break;
-            }
-        }
+        RegistroTrabalho toDelete = findMatchingEntry(currentLogs, selected);
         
         if (toDelete != null) {
             service.deleteRegistro(toDelete);

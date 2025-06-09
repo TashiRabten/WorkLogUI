@@ -6,6 +6,7 @@ import com.example.worklogui.RateInfo;
 import com.example.worklogui.exceptions.WorkLogServiceException;
 import com.example.worklogui.exceptions.WorkLogValidationException;
 import com.example.worklogui.exceptions.WorkLogNotFoundException;
+import com.example.worklogui.utils.CalculationUtils;
 import com.example.worklogui.utils.DateUtils;
 import com.example.worklogui.utils.ValidationHelper;
 import com.example.worklogui.utils.ErrorHandler;
@@ -109,84 +110,21 @@ public class WorkLogBusinessService {
      * Calculates earnings for a work log entry
      */
     public double calculateEarnings(RegistroTrabalho registro) {
-        double taxa = registro.getTaxaUsada();
-        String tipo = registro.getTipoUsado();
-        if (tipo == null) tipo = "hour";
-
-        double ganho = tipo.equalsIgnoreCase("minuto") ? 
-            registro.getMinutos() * taxa : 
-            registro.getHoras() * taxa;
-            
-        return registro.isPagamentoDobrado() ? ganho * 2 : ganho;
+        return CalculationUtils.calculateSingleEntryEarnings(registro);
     }
     
     /**
      * Calculates total time summary by company
      */
     public String calculateTimeTotal() {
-        Map<String, double[]> totais = new HashMap<>();
-
-        try {
-            List<RegistroTrabalho> allLogs = fileManager.getAllWorkLogs();
-            for (RegistroTrabalho r : allLogs) {
-                String empresa = r.getEmpresa();
-                totais.putIfAbsent(empresa, new double[2]);
-                totais.get(empresa)[0] += r.getHoras();
-                totais.get(empresa)[1] += r.getMinutos();
-            }
-        } catch (Exception e) {
-            ErrorHandler.handleUnexpectedError("calculating time total", e);
-            return "Error calculating time total: " + e.getMessage();
-        }
-
-        StringBuilder sb = new StringBuilder("Total Summary / Resumo Total:\n\n");
-
-        for (Map.Entry<String, double[]> e : totais.entrySet()) {
-            String empresa = e.getKey();
-            double horas = e.getValue()[0];
-            double minutos = e.getValue()[1];
-
-            if (minutos >= 60) {
-                int horasFromMinutos = (int) (minutos / 60);
-                horas += horasFromMinutos;
-                minutos = minutos % 60;
-            }
-
-            double totalHoras = horas + (minutos / 60.0);
-            sb.append(String.format("%s: %.2f hours, %.2f minutes\n", empresa, horas, minutos));
-            sb.append(String.format(" → Total in hours: %.2f\n\n", totalHoras));
-        }
-
-        return sb.toString();
+        return CalculationUtils.calculateTimeTotal(fileManager);
     }
     
     /**
      * Calculates total earnings by company
      */
     public String calculateEarnings() {
-        double total = 0;
-        Map<String, Double> ganhos = new HashMap<>();
-
-        try {
-            List<RegistroTrabalho> allLogs = fileManager.getAllWorkLogs();
-            for (RegistroTrabalho r : allLogs) {
-                String empresa = r.getEmpresa();
-                double ganho = calculateEarnings(r);
-                ganhos.put(empresa, ganhos.getOrDefault(empresa, 0.0) + ganho);
-                total += ganho;
-            }
-        } catch (Exception e) {
-            ErrorHandler.handleUnexpectedError("calculating earnings", e);
-            return "Error calculating earnings: " + e.getMessage();
-        }
-
-        StringBuilder sb = new StringBuilder("Earnings / Ganho Total:\n\n");
-        for (Map.Entry<String, Double> e : ganhos.entrySet()) {
-            sb.append(String.format("%s: $%.2f\n", e.getKey(), e.getValue()));
-        }
-        sb.append(String.format("\nGrand Total / Total Geral: $%.2f", total));
-
-        return sb.toString();
+        return CalculationUtils.calculateEarnings(fileManager);
     }
     
     /**
@@ -196,7 +134,7 @@ public class WorkLogBusinessService {
         try {
             List<RegistroTrabalho> allLogs = fileManager.getAllWorkLogs();
             SummaryTotals totals = calculateTotalsFromLogs(allLogs);
-            return buildSummaryReport(totals.monthTotals, totals.yearTotals);
+            return CalculationUtils.buildSummaryReport(totals.monthTotals, totals.yearTotals);
         } catch (Exception e) {
             ErrorHandler.handleUnexpectedError("calculating summary", e);
             return "Error calculating summary: " + e.getMessage();
@@ -222,40 +160,6 @@ public class WorkLogBusinessService {
         return new SummaryTotals(monthTotals, yearTotals);
     }
 
-    private String buildSummaryReport(Map<String, Double> monthTotals, Map<String, Double> yearTotals) {
-        StringBuilder sb = new StringBuilder("📆 Year-Month Summary:\n\n");
-        String currentYear = "";
-        
-        for (String monthKey : monthTotals.keySet()) {
-            String year = DateUtils.getYearFromKey(monthKey);
-            currentYear = appendYearSectionIfNeeded(sb, year, currentYear, yearTotals);
-            appendMonthEntry(sb, monthKey, monthTotals.get(monthKey));
-        }
-
-        appendFinalYearTotal(sb, currentYear, yearTotals);
-        return sb.toString();
-    }
-
-    private String appendYearSectionIfNeeded(StringBuilder sb, String year, String currentYear, Map<String, Double> yearTotals) {
-        if (year != null && !year.equals(currentYear)) {
-            if (!currentYear.isEmpty()) {
-                sb.append(String.format("%s Grand Total → $%.2f\n\n", currentYear, yearTotals.get(currentYear)));
-            }
-            sb.append("📅 ").append(year).append("\n-------------------\n");
-            return year;
-        }
-        return currentYear;
-    }
-
-    private void appendMonthEntry(StringBuilder sb, String monthKey, Double monthTotal) {
-        sb.append(String.format("%s → $%.2f\n-----------------------\n", monthKey, monthTotal));
-    }
-
-    private void appendFinalYearTotal(StringBuilder sb, String currentYear, Map<String, Double> yearTotals) {
-        if (!currentYear.isEmpty()) {
-            sb.append(String.format("%s Grand Total → $%.2f\n", currentYear, yearTotals.get(currentYear)));
-        }
-    }
 
     private static class SummaryTotals {
         final Map<String, Double> monthTotals;

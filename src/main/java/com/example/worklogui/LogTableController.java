@@ -1,5 +1,6 @@
 package com.example.worklogui;
 
+import com.example.worklogui.utils.CalculationUtils;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.SimpleStringProperty;
@@ -471,38 +472,7 @@ public class LogTableController {
      * Helper method to build year-to-months map
      */
     private Map<String, List<String>> buildYearToMonthsMap() {
-        Map<String, List<String>> result = new HashMap<>();
-        for (RegistroTrabalho r : service.getRegistros()) {
-            try {
-                LocalDate date = LocalDate.parse(r.getData(), java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy"));
-                String year = String.valueOf(date.getYear());
-                String month = String.format("%02d", date.getMonthValue());
-
-                List<String> months = result.computeIfAbsent(year, k -> new ArrayList<>());
-                if (!months.contains(month)) {
-                    months.add(month);
-                    Collections.sort(months);
-                }
-            } catch (Exception ignored) {}
-        }
-
-        // Add bills
-        Map<String, List<Bill>> allBills = service.getAllBills();
-        for (Map.Entry<String, List<Bill>> entry : allBills.entrySet()) {
-            for (Bill bill : entry.getValue()) {
-                LocalDate date = bill.getDate();
-                String year = String.valueOf(date.getYear());
-                String month = String.format("%02d", date.getMonthValue());
-
-                List<String> months = result.computeIfAbsent(year, k -> new ArrayList<>());
-                if (!months.contains(month)) {
-                    months.add(month);
-                    Collections.sort(months);
-                }
-            }
-        }
-
-        return result;
+        return CalculationUtils.buildYearToMonthsMap(service.getRegistros(), service.getAllBills());
     }
 
     private void setStatusMessage(String message) {

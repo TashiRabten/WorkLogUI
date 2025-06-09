@@ -1,5 +1,6 @@
 package com.example.worklogui;
 
+import com.example.worklogui.utils.CalculationUtils;
 import javafx.application.Platform;
 import javafx.scene.control.Alert;
 import javafx.stage.Stage;
@@ -230,39 +231,7 @@ public class BillsManager {
      * Helper method to build year-to-months map
      */
     private Map<String, List<String>> buildYearToMonthsMap() {
-        Map<String, List<String>> result = new HashMap<>();
-
-        // First, add all years/months from work logs
-        for (RegistroTrabalho r : service.getRegistros()) {
-            try {
-                LocalDate date = LocalDate.parse(r.getData(), java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy"));
-                String year = String.valueOf(date.getYear());
-                String month = String.format("%02d", date.getMonthValue());
-
-                List<String> months = result.computeIfAbsent(year, k -> new ArrayList<>());
-                if (!months.contains(month)) {
-                    months.add(month);
-                    Collections.sort(months);
-                }
-            } catch (Exception ignored) {}
-        }
-
-        // Then add all years/months from bills
-        Map<String, List<Bill>> allBills = service.getAllBills();
-        for (String yearMonth : allBills.keySet()) {
-            if (yearMonth.length() >= 7) {  // Format YYYY-MM
-                String year = yearMonth.substring(0, 4);
-                String month = yearMonth.substring(5, 7);
-
-                List<String> months = result.computeIfAbsent(year, k -> new ArrayList<>());
-                if (!months.contains(month)) {
-                    months.add(month);
-                    Collections.sort(months);
-                }
-            }
-        }
-
-        return result;
+        return CalculationUtils.buildYearToMonthsMap(service.getRegistros(), service.getAllBills());
     }
 
     private void setStatusMessage(String message) {
